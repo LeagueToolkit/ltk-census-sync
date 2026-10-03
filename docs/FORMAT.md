@@ -30,7 +30,11 @@ carries the format number, and a reader checks it before parsing.
 
   `Census-Manifest` is the manifest id in 16 hex, `Census-Realms` the live realms that shipped the
   build, sorted, space-separated. So the same build appended twice makes the same commit id.
-- **A tag** (lightweight) named for the patch (`8.20` ... `16.19`) marks each patch's last build.
+- **A tag** (lightweight) named for the patch (`8.20` ... `16.19`) marks the patch's newest build
+  when the next patch's first build is appended, and never moves (decided 2026-10-03). Up to
+  16.19, in patch order, that is each patch's last build. A build of a patch that arrives after
+  its tag lands after it: `16.19` marks 16.19.8207193, and the hotfixes after it come later. A
+  reader that wants a patch's very last build reads `version` in `build.yaml`.
 - **Order.** The builds up to 16.19 are in patch order: season, patch, build number, manifest id.
   Appended builds land in the order they arrive ([APPEND.md](APPEND.md)).
 

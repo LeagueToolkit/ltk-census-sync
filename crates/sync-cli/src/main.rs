@@ -11,7 +11,7 @@ use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
-use sync_history::{append, build_facts, check, manifests, Appended, Git};
+use sync_history::{append, build_facts, check, manifests, tag_patch, Appended, Git};
 use sync_source::{
     BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, ManifestList, LIVE_REALM,
 };
@@ -31,7 +31,8 @@ enum Command {
     /// The tip, and the live builds the manifest list has added that the history lacks, in the
     /// order they arrived.
     Status(StatusArgs),
-    /// Append one build to the local history; no push.
+    /// Append one build to the local history; no push. A build of a later patch than the tip's
+    /// first tags the tip with its patch, unless that patch has a tag.
     Append(AppendArgs),
     /// Check the commits after a pushed one, before they are pushed: every file they add or change
     /// by its kind, each message, and each tree against its build's manifest. Prints each problem.
@@ -307,9 +308,13 @@ fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
         None => inputs.published(manifest)?,
     };
     let facts = facts_of(&version, manifest, &date)?;
+    let tip = git.rev_parse(&branch)?;
     let started = Instant::now();
     let appended = append(&git, &args.branch, &facts, &inputs.manifest(manifest)?, &inputs.source(), pool)?;
     log(&facts, &appended, started, Downloaded::default(), inputs.downloaded());
+    if let Some(patch) = tag_patch(&git, &tip, &facts)? {
+        tracing::info!("tagged {patch} at {}, its newest build, since {} starts {}", &tip[..12], facts.version, facts.patch);
+    }
     Ok(())
 }
 

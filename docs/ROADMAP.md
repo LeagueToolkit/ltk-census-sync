@@ -44,11 +44,6 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
 
 ## Open
 
-- **Tags in arrival order.** A tag marks a patch's last build, which is known only once the next
-  patch ships, and a hotfix can still arrive after that. Either tag a patch when the first build
-  of the next one is appended and never move it (a later hotfix lands after the tag), or move the
-  tag to each new build of its patch (a reader has to fetch tags with `--force`). The first keeps
-  tags immutable and is the one proposed.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
 - **How much the chunk cache keeps.** A build's chunks are almost never read again by the next

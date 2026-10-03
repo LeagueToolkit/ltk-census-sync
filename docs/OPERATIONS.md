@@ -21,7 +21,7 @@ cannot fast-forward to.
 | command | does |
 | --- | --- |
 | `census-sync status` | fetch the manifest list, and print the tip and the live builds the history lacks, in arrival order, each with its version, manifest and date |
-| `census-sync append <manifest>` | append one build to the local `history`, its version from the manifest list and its date from the CDN unless given; no push |
+| `census-sync append <manifest>` | append one build to the local `history`, its version from the manifest list and its date from the CDN unless given, and tag the tip with its patch when the build starts a later one and that patch has no tag; no push |
 | `census-sync check <commit>` | the checks of [APPEND.md](APPEND.md), "Before a push", on each commit after `commit`, the last one pushed; prints each problem |
 | `census-sync push` | push `history`, its tags and notes to the configured remote |
 | `census-sync run` | fetch, status, append every new build in arrival order, check, push, and move the list's checkout to the fetched commit |
