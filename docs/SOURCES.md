@@ -4,14 +4,21 @@ Where a run learns which builds to append and where their bytes come from.
 
 ## Live builds
 
-The history tracks the Windows game client (`lol-game-client`) on the live realms, never PBE. A
-build is new when its manifest id is in no commit's `Census-Manifest` trailer.
+The history tracks the Windows game client (`lol-game-client`) on NA1, the one realm taken as live
+(decided 2026-10-03): a build is appended when NA1 ships it, and its `realms` is `NA1`. Realms
+mattered for RADS, which shipped each realm its own builds; from 16.10 to 16.19 NA1 shipped exactly
+the 38 builds the history holds ([RUNS.md](RUNS.md)). Never PBE. A build is new when its manifest
+id is in no commit's `Census-Manifest` trailer.
 
 **The manifest list.** The community mirror `github.com/Morilli/riot-manifests` records every
-manifest Riot's patchlines publish, one file per build: `LoL/<realm>/windows/lol-game-client/<version>.txt`,
-holding the manifest's URL. A `git fetch` of the mirror, diffed against the last run, lists the new
-ones. The file name gives the version (`16.19.8207193`) and the directory the realm; one manifest
-ships on several realms, which together are the build's `realms`.
+manifest Riot's patchlines publish, one file per build:
+`LoL/<realm>/windows/lol-game-client/<version>.txt`, holding the manifest's URL. A local clone of
+it is checked out at the last list commit whose builds were appended. A `git fetch` brings the
+commits after it; the files they add or change under `LoL/NA1/windows/lol-game-client/`, in the
+order the commits came, and by build number within one commit, are the candidates, and a candidate
+whose manifest the history already holds is skipped. The checkout moves to the fetched commit once
+its builds are appended and pushed. The list updates once a day, so its commits are a day or more
+behind the builds and date nothing.
 
 **The version** can also be read from the build itself: `League of Legends.exe`'s version resource
 (`VS_FIXEDFILEINFO`; the build number is the third and fourth parts, the fourth zero-padded to four

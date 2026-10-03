@@ -230,3 +230,9 @@ published history was not checked.
   downloaded the 28.7 MB the stopped run lacked, in 48 requests; builds 2 to 4 downloaded nothing.
 - **The cache.** 1.6 GB on disk after the runs, for about 1.7 GB downloaded; the four manifests,
   64 MB.
+
+## NA1 against the history (2026-10-03)
+
+- **What.** The manifests under `LoL/NA1/windows/lol-game-client/` for 16.10 to 16.19 in the
+  manifest list, against the 38 builds the history holds for those patches.
+- **Result.** The same 38 manifests: none the history lacks, none it holds that NA1 did not ship.

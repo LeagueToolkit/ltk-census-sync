@@ -22,6 +22,9 @@ pub enum Error {
     /// The chunk cache could not be opened, read or written.
     #[error("chunk cache: {0}")]
     Cache(#[from] fjall::Error),
+    /// The manifest list could not be read.
+    #[error("manifest list: {0}")]
+    List(String),
     /// A WAD whose header or table does not have the shape of one.
     #[error("WAD: {0}")]
     Wad(String),
