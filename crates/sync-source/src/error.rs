@@ -7,9 +7,6 @@ pub enum Error {
     /// A manifest that does not have the shape of one.
     #[error("manifest: {0}")]
     Manifest(String),
-    /// A bundle part that does not have the shape of one.
-    #[error("bundle {path}: {message}")]
-    Bundle { path: String, message: String },
     /// A chunk no source holds.
     #[error("chunk {0:016x} is in no source")]
     MissingChunk(u64),

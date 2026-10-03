@@ -26,16 +26,15 @@ cannot fast-forward to.
 | `census-sync push` | push `history`, its tags and notes to the configured remote |
 | `census-sync run` | fetch, status, append every new build in arrival order, check, push |
 | `census-sync oracle <commit> <count>` | re-append `count` builds after `commit` on a branch of its own, and compare each tree and commit with the published one |
-| `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in |
+| `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in; for a mirror or the cache (`--offline`), since it asks for one chunk a request |
 | `census-sync rebuild <commit> <count>` | re-append `count` builds after `commit` in a row on a branch of its own, from their bytes and their published facts, and list where each tag of the range would move; the history as its bytes write it, for a fix of the published history |
 
-The commands read chunks from an archive of past builds (`--archive`): its manifests,
-`game-win/<MANIFEST ID>.manifest`, and its merged bundle, behind a mirror of whole bundles when one
-is given (`--mirror`). With `--cdn`, a chunk the mirror and the archive lack or hold wrong is
-fetched by range from Riot's CDN through the chunk cache (`--cache`), once
-([SOURCES.md](SOURCES.md), "Chunk sources"); `--cdn-host` names one host that serves bundles at
-Riot's paths, such as a mirror served over HTTP, in place of Riot's. One run holds the cache at a
-time.
+The commands read manifests from `--manifests` and chunks from Riot's CDN by range, through the
+chunk cache (`--cache`); a manifest or a chunk not there is downloaded, once
+([SOURCES.md](SOURCES.md), "Chunk sources"). A mirror of whole bundles (`--mirror`) is read first
+when given. `--offline` reads the manifests, the mirror and the cache only. `--cdn-host` names one
+host that serves manifests and bundles at Riot's paths, such as a mirror served over HTTP, in place
+of Riot's. One run holds the cache at a time.
 
 ## A scheduled run
 
@@ -76,8 +75,9 @@ and running again is the whole recovery.
 
 ```
 data/history.git   the working clone
+data/manifests/    manifests by id, as downloaded
 data/chunks/       the chunk cache: frames by hash scheme, uncompressed size and chunk id
-data/cdn/          whole bundles at their CDN paths, a mirror
+data/cdn/          whole bundles at their CDN paths, a mirror, when one is kept
 data/logs/         one log per run
 ```
 

@@ -19,8 +19,7 @@ published history, entry by entry. Done ([RUNS.md](RUNS.md)).
 **2. `sync-source`: manifests and chunks.** The RMAN manifest reader, keeping each chunk's bundle
 layout; the four chunk-hash schemes; files and ranges rebuilt from chunks through `Read + Seek`;
 a WAD's table read from its front, and an entry's bytes from its stored ones (a link's as stored,
-undecoded). A local merged bundle as the first chunk source, so the
-oracle can run before the CDN source exists. Done ([RUNS.md](RUNS.md)).
+undecoded). Done ([RUNS.md](RUNS.md)).
 
 **3. `sync-history` and `append`.** The tip's index, the batched blob reader, the fast-import
 writer, `census-sync append`. Passes the oracle over 16.10-16.19 appended onto 16.9. Done: 36 of

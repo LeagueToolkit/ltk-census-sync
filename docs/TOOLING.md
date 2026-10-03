@@ -84,11 +84,6 @@ and `cargo test --workspace --locked`.
   `entries.txt`, one `<commit> <path of the entry's own file>` per line. The same tests render
   every commit's `build.yaml`, message and time, and every `_wad.yaml` of the tip, which need no
   bytes.
-- **Sources** are tested against an archive of past builds the same way
-  (`sync-source/tests/archive.rs`, `CENSUS_SYNC_ARCHIVE` and `CENSUS_SYNC_HISTORY`, and
-  `CENSUS_SYNC_COMMIT` for a build other than the tip): every WAD of the build read from the
-  manifest and the merged bundle renders the published `_wad.yaml`, and every entry of a few WADs
-  is read and renders its published files.
 - **The kind audit.** The oracle reads only the entries that changed in its range, so a change to
   `kind_of` or to `ltk_file` also runs the writer tests over every tip entry of a kind that rests on
   a guess or is rare (`inibin`, `lightgrid`, `tga`, `png`, `stringtable`) and every entry with no
@@ -100,7 +95,7 @@ The history is its own test. For a range of published builds:
 
 1. clone or reuse the working clone;
 2. for each build of the range, set a branch to its published parent and append the build from its
-   bytes, from the cache, a mirror, an archive or the CDN;
+   bytes, from a mirror, the cache or the CDN;
 3. compare the appended commit's tree and commit id with the published commit's.
 
 Each build goes onto its published parent, so one build that differs does not hide the ones after

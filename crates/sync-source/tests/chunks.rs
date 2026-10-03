@@ -2,10 +2,9 @@ mod common;
 
 use std::io::{Read, Seek, SeekFrom};
 
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use common::{chunks_of, file_of};
-use sync_source::{open_frame, BundleMirror, ChunkHash, ChunkRef, ChunkSource, Error, FileReader, Layers, MergedBundle};
-use xxhash_rust::xxh64::xxh64;
+use sync_source::{open_frame, BundleMirror, ChunkHash, ChunkRef, ChunkSource, Error, FileReader, Layers};
 
 fn text(len: usize) -> Vec<u8> {
     (0..len).map(|i| b"abcdefghijklmnopqrstuvwxyz"[i * 7 % 26]).collect()
@@ -78,69 +77,6 @@ fn a_chunk_is_checked_only_under_the_hash_its_file_lists() {
     assert!(matches!(open_frame(&chunk, &frame, &mut dec), Err(Error::BadChunk { message, .. }) if message.contains("Sha256")));
     chunk.id = ChunkHash::Sha256.id_of(&data);
     assert_eq!(open_frame(&chunk, &frame, &mut dec).unwrap(), data);
-}
-
-#[test]
-fn a_merged_bundle_reads_each_copy_of_an_id_of_the_right_size_until_one_checks() {
-    let dir = tempfile::tempdir().unwrap();
-    let dir = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let bytes = text(300);
-    let chunks = chunks_of(&bytes, 100);
-    let [(a, fa), (b, fb), (c, fc)] = [chunks[0].clone(), chunks[1].clone(), chunks[2].clone()];
-    let size = |r: &sync_source::ChunkRef| r.place.uncompressed_size;
-    // The first part holds b's frame under a's id, at a's size; the second holds a under its id at
-    // another size, then a's own frame.
-    let short = zstd::bulk::compress(b"not a", 1).unwrap();
-    write_part(&dir.join("t.bundle"), &[(a.id, size(&a), &fb), (b.id, size(&b), &fb)]);
-    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc), (a.id, 5, &short), (a.id, size(&a), &fa)]);
-
-    let bundle = MergedBundle::open(&dir.join("t.bundle")).unwrap();
-    assert_eq!(bundle.len(), 5);
-    assert_eq!(bundle.chunks(&[c, a]).unwrap(), [&bytes[200..], &bytes[..100]]);
-    let mut file = FileReader::new(&bundle, vec![a, b, c]);
-    assert_eq!(file.read_range(0, 300).unwrap(), bytes);
-
-    let mut missing = a;
-    missing.id ^= 1;
-    assert!(matches!(bundle.chunks(&[missing]), Err(Error::MissingChunk(_))));
-    // A size no copy has is a chunk the bundle lacks; copies that do not check are a bad chunk.
-    let mut other = b;
-    other.place.uncompressed_size += 1;
-    assert!(matches!(bundle.chunks(&[other]), Err(Error::MissingChunk(_))));
-    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc)]);
-    let bundle = MergedBundle::open(&dir.join("t.bundle")).unwrap();
-    assert!(matches!(bundle.chunks(&[a]), Err(Error::BadChunk { .. })));
-}
-
-#[test]
-fn a_part_whose_table_does_not_match_its_footer_is_refused() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = Utf8PathBuf::from_path_buf(dir.path().join("bad.bundle")).unwrap();
-    let (chunk, frame) = chunks_of(b"x", 1).remove(0);
-    write_part(&path, &[(chunk.id, 1, &frame)]);
-    let mut bytes = fs_err::read(&path).unwrap();
-    let at = bytes.len() - 20;
-    bytes[at] ^= 1;
-    fs_err::write(&path, bytes).unwrap();
-    assert!(matches!(MergedBundle::open(&path), Err(Error::Bundle { message, .. }) if message.contains("hashes to")));
-    assert!(MergedBundle::open(&path.with_file_name("none.bundle")).is_err());
-}
-
-/// A merged bundle part holding these frames, in this order.
-fn write_part(path: &Utf8Path, frames: &[(u64, u32, &[u8])]) {
-    let (mut data, mut toc) = (Vec::new(), Vec::new());
-    for (id, uncompressed, frame) in frames {
-        toc.extend(id.to_le_bytes());
-        toc.extend(uncompressed.to_le_bytes());
-        toc.extend((frame.len() as u32).to_le_bytes());
-        data.extend(*frame);
-    }
-    data.extend(&toc);
-    data.extend(xxh64(&toc, 0).to_le_bytes());
-    data.extend((frames.len() as u32).to_le_bytes());
-    data.extend(0xFFFF_FFFFu32.to_le_bytes());
-    data.extend(b"RBUN");
-    fs_err::write(path, data).unwrap();
 }
 
 #[test]

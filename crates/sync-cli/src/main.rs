@@ -12,7 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
 use sync_history::{append, build_facts, Appended, Git};
-use sync_source::{BundleMirror, Cdn, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, MergedBundle};
+use sync_source::{BundleMirror, Cdn, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest};
 
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
@@ -42,22 +42,20 @@ enum Command {
 
 #[derive(Args)]
 struct Sources {
-    /// An archive of past builds: `game-win/<MANIFEST ID>.manifest` and the merged bundle
-    /// `lol.bundle`.
-    #[arg(long, env = "CENSUS_SYNC_ARCHIVE")]
-    archive: Utf8PathBuf,
-    /// Whole bundles at their CDN paths under this directory, read before the archive.
-    #[arg(long, env = "CENSUS_SYNC_MIRROR")]
-    mirror: Option<Utf8PathBuf>,
-    /// For a chunk the mirror and the archive lack or hold wrong, fetch it by range from the CDN
-    /// through the chunk cache.
-    #[arg(long)]
-    cdn: bool,
+    /// Manifests by id, `<MANIFEST ID>.manifest`. A manifest not there is downloaded into it.
+    #[arg(long, env = "CENSUS_SYNC_MANIFESTS", default_value = "data/manifests")]
+    manifests: Utf8PathBuf,
     /// The chunk cache: the frames downloaded from the CDN.
     #[arg(long, env = "CENSUS_SYNC_CACHE", default_value = "data/chunks")]
     cache: Utf8PathBuf,
-    /// One host serving bundles at Riot's paths, such as a mirror served over HTTP, in place of
-    /// Riot's CDN.
+    /// Whole bundles at their CDN paths under this directory, read before the cache and the CDN.
+    #[arg(long, env = "CENSUS_SYNC_MIRROR")]
+    mirror: Option<Utf8PathBuf>,
+    /// Read the manifests, the mirror and the cache only; download nothing.
+    #[arg(long)]
+    offline: bool,
+    /// One host serving manifests and bundles at Riot's paths, such as a mirror served over HTTP,
+    /// in place of Riot's CDN.
     #[arg(long)]
     cdn_host: Option<String>,
 }
@@ -116,38 +114,34 @@ struct VerifyArgs {
     manifests: Vec<String>,
 }
 
-/// The chunk sources of a run, asked in order: a mirror when one is given, the archive's merged
-/// bundle, and the CDN through the chunk cache when asked for.
-struct Archive {
-    root: Utf8PathBuf,
-    bundle: MergedBundle,
+/// The manifests and chunk sources of a run. Chunks are asked of the mirror when one is given, then
+/// of the CDN through the chunk cache, or of the cache alone when offline.
+struct Inputs {
+    manifests: Utf8PathBuf,
     mirror: Option<BundleMirror>,
+    cache: ChunkCache,
     cdn: Option<Cdn>,
 }
 
-impl Archive {
+impl Inputs {
     fn open(sources: &Sources) -> Result<Self> {
-        let started = Instant::now();
-        let bundle = MergedBundle::open(&sources.archive.join("lol.bundle")).context("opening the merged bundle")?;
-        tracing::info!("{} chunks in the merged bundle ({:.1}s)", bundle.len(), started.elapsed().as_secs_f64());
-        let mirror = sources.mirror.as_deref().map(BundleMirror::new);
-        let cdn = match sources.cdn {
-            true => {
-                let cache = ChunkCache::open(&sources.cache).with_context(|| format!("opening the chunk cache {}", sources.cache))?;
-                let cdn = Cdn::new(cache);
-                Some(match &sources.cdn_host {
-                    Some(host) => cdn.with_host(host),
-                    None => cdn,
-                })
+        let cache = ChunkCache::open(&sources.cache).with_context(|| format!("opening the chunk cache {}", sources.cache))?;
+        let cdn = (!sources.offline).then(|| {
+            let cdn = Cdn::new(cache.clone());
+            match &sources.cdn_host {
+                Some(host) => cdn.with_host(host),
+                None => cdn,
             }
-            false => None,
-        };
-        Ok(Self { root: sources.archive.clone(), bundle, mirror, cdn })
+        });
+        let mirror = sources.mirror.as_deref().map(BundleMirror::new);
+        Ok(Self { manifests: sources.manifests.clone(), mirror, cache, cdn })
     }
 
     fn manifest(&self, id: u64) -> Result<Manifest> {
-        let path = self.root.join("game-win").join(format!("{id:016X}.manifest"));
-        Ok(Manifest::read(&path)?)
+        Ok(match &self.cdn {
+            Some(cdn) => cdn.manifest(id, &self.manifests)?,
+            None => Manifest::read(&self.manifests.join(format!("{id:016X}.manifest")))?,
+        })
     }
 
     fn source(&self) -> Layers<'_> {
@@ -155,9 +149,9 @@ impl Archive {
         if let Some(mirror) = &self.mirror {
             layers.push(mirror);
         }
-        layers.push(&self.bundle);
-        if let Some(cdn) = &self.cdn {
-            layers.push(cdn);
+        match &self.cdn {
+            Some(cdn) => layers.push(cdn),
+            None => layers.push(&self.cache),
         }
         Layers::new(layers)
     }
@@ -209,10 +203,10 @@ fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
         legacy_bins: legacy_bins(season, patch),
         realms: args.realms.clone(),
     };
-    let archive = Archive::open(&args.sources)?;
+    let inputs = Inputs::open(&args.sources)?;
     let started = Instant::now();
-    let appended = append(&git, &args.branch, &facts, &archive.manifest(manifest)?, &archive.source(), pool)?;
-    log(&facts, &appended, started, Downloaded::default(), archive.downloaded());
+    let appended = append(&git, &args.branch, &facts, &inputs.manifest(manifest)?, &inputs.source(), pool)?;
+    log(&facts, &appended, started, Downloaded::default(), inputs.downloaded());
     Ok(())
 }
 
@@ -231,17 +225,17 @@ fn published_after(git: &Git, commit: &str, count: usize) -> Result<(String, Vec
 fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let git = Git::open(&args.repo)?;
     let (_, published) = published_after(&git, &args.commit, args.count)?;
-    let archive = Archive::open(&args.sources)?;
-    let source = archive.source();
+    let inputs = Inputs::open(&args.sources)?;
+    let source = inputs.source();
     let branch = format!("refs/heads/{}", args.branch);
     let started = Instant::now();
     let (mut trees, mut commits, mut failed) = (0, 0, Vec::new());
     for (i, expected) in published.iter().enumerate() {
-        let (build, before) = (Instant::now(), archive.downloaded());
+        let (build, before) = (Instant::now(), inputs.downloaded());
         let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
         // Onto the published parent, so one build that differs does not hide the ones after it.
         git.reset_ref(&branch, &git.rev_parse(&format!("{expected}^"))?)?;
-        let appended = match archive.manifest(facts.manifest).and_then(|m| Ok(append(&git, &args.branch, &facts, &m, &source, pool)?)) {
+        let appended = match inputs.manifest(facts.manifest).and_then(|m| Ok(append(&git, &args.branch, &facts, &m, &source, pool)?)) {
             Ok(appended) => appended,
             Err(e) => {
                 tracing::error!("{}/{} {}: stopped: {e:#}", i + 1, published.len(), facts.version);
@@ -249,7 +243,7 @@ fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
                 continue;
             }
         };
-        log(&facts, &appended, build, before, archive.downloaded());
+        log(&facts, &appended, build, before, inputs.downloaded());
         let tree = git.rev_parse(&format!("{expected}^{{tree}}"))?;
         if appended.tree != tree {
             let diff = git.run(&["diff-tree", "-r", "--name-status", expected, &appended.commit])?;
@@ -278,16 +272,16 @@ fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
 fn run_rebuild(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let git = Git::open(&args.repo)?;
     let (base, published) = published_after(&git, &args.commit, args.count)?;
-    let archive = Archive::open(&args.sources)?;
-    let source = archive.source();
+    let inputs = Inputs::open(&args.sources)?;
+    let source = inputs.source();
     git.reset_ref(&format!("refs/heads/{}", args.branch), &base)?;
     let started = Instant::now();
     let mut rebuilt = Vec::with_capacity(published.len());
     for (i, expected) in published.iter().enumerate() {
-        let (build, before) = (Instant::now(), archive.downloaded());
+        let (build, before) = (Instant::now(), inputs.downloaded());
         let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
-        let appended = append(&git, &args.branch, &facts, &archive.manifest(facts.manifest)?, &source, pool)?;
-        log(&facts, &appended, build, before, archive.downloaded());
+        let appended = append(&git, &args.branch, &facts, &inputs.manifest(facts.manifest)?, &source, pool)?;
+        log(&facts, &appended, build, before, inputs.downloaded());
         let differs = git.run(&["diff-tree", "-r", "--name-only", expected, &appended.commit])?.lines().count();
         match differs {
             0 if appended.commit == *expected => tracing::info!("{}/{} {}: the published commit", i + 1, published.len(), facts.version),
@@ -314,8 +308,8 @@ fn run_rebuild(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
 }
 
 fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
-    let archive = Archive::open(&args.sources)?;
-    let source = archive.source();
+    let inputs = Inputs::open(&args.sources)?;
+    let source = inputs.source();
     let mut seen = HashSet::new();
     // Each chunk with the first manifest and file that use it, the file's path interned: a path
     // repeats in every build.
@@ -323,7 +317,7 @@ fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let mut paths: Vec<String> = Vec::new();
     let mut path_index: HashMap<String, u32> = HashMap::new();
     for id in &args.manifests {
-        let manifest = archive.manifest(hex_id(id)?)?;
+        let manifest = inputs.manifest(hex_id(id)?)?;
         for file in manifest.files.iter().filter(|f| args.all_files || f.path.ends_with(".wad.client")) {
             let fresh: Vec<ChunkRef> = manifest.chunks_of(file)?.into_iter().filter(|c| seen.insert(c.id)).collect();
             if fresh.is_empty() {

@@ -80,17 +80,17 @@ that holds it with bytes that check:
   `channels/public/bundles/<BUNDLE ID>.bundle` under one directory, read by the layout of the
   manifest being read, as from the CDN. The directory can be served over HTTP as a mirror of the
   CDN. A run reads it and never writes it.
-- **A local merged bundle**, the form an archive of past builds keeps (rman's one bundle per part,
-  with its own table from chunk id to location). Read by chunk id and its own table only, never
-  with a manifest's offsets, which describe another encoding. The archive is not trusted more than
-  the CDN: it holds at least one chunk's bytes under another chunk's id ([RUNS.md](RUNS.md)), and
-  every chunk it gives is checked like any other.
 - **The CDN**, over https, read through **the chunk cache**: one fjall database on local disk that
   keeps each frame the CDN gave under the three things its chunk is: the chunking parameter version
   of its hash, its uncompressed size and its id (chosen 2026-10-03). A chunk the cache holds with a
   frame that checks comes from the cache; any other is fetched by range, checked, and kept. So a
   chunk is downloaded once, and a frame is never handed out for a chunk of another scheme or size
-  that shares its id. A frame that does not check is fetched again and replaced.
+  that shares its id. A frame that does not check is fetched again and replaced. A run offline
+  reads the cache alone.
+
+No source is trusted more than the CDN. An archive of past builds held chunks' bytes under other
+chunks' ids, and part of the history was written from them ([RUNS.md](RUNS.md)); every chunk any
+source gives is checked.
 
 **Manifests** come from the manifest host once, are checked to hash to the id asked for, and are
 kept as files named by id.

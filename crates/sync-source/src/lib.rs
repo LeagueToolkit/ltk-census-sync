@@ -5,7 +5,6 @@
 //! Shaped as a general manifest crate would be, so it can move into the LeagueToolkit family
 //! whole: nothing here knows about the history.
 
-mod bundle;
 mod byteranges;
 mod cache;
 mod cdn;
@@ -17,7 +16,6 @@ mod mirror;
 mod rman;
 mod wad;
 
-pub use bundle::MergedBundle;
 pub use cache::ChunkCache;
 pub use cdn::{Cdn, Downloaded, BUNDLE_HOST, MANIFEST_HOST};
 pub use chunk::{open_frame, ChunkSource};

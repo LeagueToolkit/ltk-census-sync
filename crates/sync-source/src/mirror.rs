@@ -2,9 +2,10 @@
 //! (`channels/public/bundles/<BUNDLE ID>.bundle` under a root), so the directory can be served as
 //! a mirror of the CDN. A chunk is read where the manifest being read places it, as from the CDN.
 
+use std::io::{Read, Seek, SeekFrom};
+
 use camino::{Utf8Path, Utf8PathBuf};
 
-use crate::bundle::read_exact_at;
 use crate::chunk::{open, ChunkSource};
 use crate::rman::ChunkRef;
 use crate::Error;
@@ -41,7 +42,9 @@ impl ChunkSource for BundleMirror {
                     return Err(Error::MissingChunk(chunk.id));
                 }
                 let mut frame = vec![0u8; chunk.place.compressed_size as usize];
-                read_exact_at(&fs_err::File::open(&path)?, chunk.place.offset, &mut frame)?;
+                let mut file = fs_err::File::open(&path)?;
+                file.seek(SeekFrom::Start(chunk.place.offset))?;
+                file.read_exact(&mut frame)?;
                 open(chunk, &frame)
             })
             .collect()
