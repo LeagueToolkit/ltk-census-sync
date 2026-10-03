@@ -31,7 +31,8 @@ Passes the oracle over one patch with the CDN as the only source. Done: the four
 ([RUNS.md](RUNS.md)).
 
 **5. Finding builds.** The manifest list, the version, the date, the realms;
-`census-sync status`.
+`census-sync status`. Done: it lists 16.19.8217343 and 16.19.8230722 after the tip
+([RUNS.md](RUNS.md)).
 
 **6. Checks and pushing.** `census-sync check` and `push`, against a stand-in remote first. Then the
 builds since 16.19, appended, checked, and pushed to the real history by the user.

@@ -245,3 +245,12 @@ published history was not checked.
 - **What.** The manifests under `LoL/NA1/windows/lol-game-client/` for 16.10 to 16.19 in the
   manifest list, against the 38 builds the history holds for those patches.
 - **Result.** The same 38 manifests: none the history lacks, none it holds that NA1 did not ship.
+
+## The first status (2026-10-03)
+
+- **What.** `census-sync status`, the list's clone checked out at `573d6e78e` (2026-09-23) and
+  fetched to `59c81cc45`.
+- **Result.** Two new builds: 16.19.8217343 (`5f25926ef18e78e7`, 2026-09-23) and 16.19.8230722
+  (`4d2a50d5edab724a`, 2026-09-28).
+- **16.19.8217343 appended** onto a scratch branch from `history`, its facts from the list and the
+  CDN: 0 of 4,047 WADs changed, so `build.yaml` alone; 16.8 MB downloaded, the manifest; 2.5 s.
