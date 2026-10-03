@@ -86,12 +86,11 @@ old tip and the run stops ([OPERATIONS.md](OPERATIONS.md)):
   an append lands builds as they ship, so a hotfix for one patch released after the next patch
   started comes after it. That is what happened; a full rebuild that wants to reproduce it sorts by
   date.
-- **A realm that adopts a build later** is recorded in a git note, `refs/notes/realms`, on the
-  build's commit (decided 2026-10-02). `build.yaml` holds the realms known at append time, and an
-  old commit is never rewritten.
+- **One realm.** A build's `realms` is `NA1`, the realm census-sync follows (decided
+  2026-10-03), so no realm adopts a build later and an old commit is never revisited for one.
 - **Tags in arrival order** are open ([ROADMAP.md](ROADMAP.md)): a patch's last build is known only
   once the next patch ships.
-- **No PBE.** Live realms only.
+- **No PBE.** The live realm only.
 
 ## The oracle
 

@@ -11,8 +11,10 @@ use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
-use sync_history::{append, build_facts, Appended, Git};
-use sync_source::{BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest};
+use sync_history::{append, build_facts, manifests, Appended, Git};
+use sync_source::{
+    BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, ManifestList, LIVE_REALM,
+};
 
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
@@ -26,6 +28,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// The tip, and the live builds the manifest list has added that the history lacks, in the
+    /// order they arrived.
+    Status(StatusArgs),
     /// Append one build to the local history; no push.
     Append(AppendArgs),
     /// Re-append builds of the history, each onto its published parent, and compare each tree and
@@ -61,6 +66,28 @@ struct Sources {
 }
 
 #[derive(Args)]
+struct StatusArgs {
+    /// The working clone of the history, a bare repository.
+    #[arg(long)]
+    repo: Utf8PathBuf,
+    /// The branch the builds are appended to.
+    #[arg(long, default_value = "history")]
+    branch: String,
+    /// A clone of the manifest list, checked out at the last commit whose builds were appended.
+    #[arg(long, env = "CENSUS_SYNC_LIST", default_value = "data/riot-manifests")]
+    list: Utf8PathBuf,
+    /// Read the list as last fetched.
+    #[arg(long)]
+    no_fetch: bool,
+    /// Manifests by id, and the days they were published.
+    #[arg(long, env = "CENSUS_SYNC_MANIFESTS", default_value = "data/manifests")]
+    manifests: Utf8PathBuf,
+    /// One host serving manifests at Riot's paths, in place of Riot's CDN.
+    #[arg(long)]
+    cdn_host: Option<String>,
+}
+
+#[derive(Args)]
 struct AppendArgs {
     /// The working clone of the history, a bare repository.
     #[arg(long)]
@@ -73,15 +100,17 @@ struct AppendArgs {
     /// Set the branch to this commit first.
     #[arg(long)]
     start: Option<String>,
-    /// The client's version, `16.19.8207193`.
+    /// A clone of the manifest list, checked out at the last commit whose builds were appended.
+    #[arg(long, env = "CENSUS_SYNC_LIST", default_value = "data/riot-manifests")]
+    list: Utf8PathBuf,
+    /// The client's version, `16.19.8207193`; by default the name the manifest list gives the
+    /// build.
     #[arg(long)]
-    version: String,
-    /// The day the manifest was published, `YYYY-MM-DD`.
+    version: Option<String>,
+    /// The day the manifest was published, `YYYY-MM-DD`; by default its `Last-Modified` on the
+    /// CDN, in UTC.
     #[arg(long)]
-    date: String,
-    /// The live realms that shipped the build.
-    #[arg(long = "realm", required = true, value_delimiter = ',')]
-    realms: Vec<String>,
+    date: Option<String>,
     /// The build's manifest id, 16 hex.
     manifest: String,
 }
@@ -159,6 +188,12 @@ impl Inputs {
         Layers::new(layers)
     }
 
+    /// The day a manifest was published, from the CDN.
+    fn published(&self, id: u64) -> Result<String> {
+        let cdn = self.cdn.as_ref().with_context(|| format!("offline, so the day manifest {id:016x} was published is not known; give --date"))?;
+        Ok(cdn.published(id, &self.manifests)?)
+    }
+
     fn downloaded(&self) -> Downloaded {
         self.cdn.as_ref().map(Cdn::downloaded).unwrap_or_default()
     }
@@ -175,6 +210,7 @@ fn main() -> Result<()> {
     let jobs = cli.jobs.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
     let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
     match cli.command {
+        Command::Status(args) => run_status(&args),
         Command::Append(args) => run_append(&args, &pool),
         Command::Oracle(args) => run_oracle(&args, &pool),
         Command::Verify(args) => run_verify(&args, &pool),
@@ -186,27 +222,73 @@ fn hex_id(text: &str) -> Result<u64> {
     u64::from_str_radix(text, 16).with_context(|| format!("{text}: a manifest id is 16 hex"))
 }
 
-fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
+fn run_status(args: &StatusArgs) -> Result<()> {
     let git = Git::open(&args.repo)?;
-    if let Some(start) = &args.start {
-        let commit = git.rev_parse(&format!("{start}^{{commit}}"))?;
-        git.reset_ref(&format!("refs/heads/{}", args.branch), &commit)?;
+    let list = ManifestList::open(&args.list)?;
+    if !args.no_fetch {
+        list.fetch()?;
     }
-    let mut parts = args.version.split('.').map(str::parse::<u16>);
+    let branch = format!("refs/heads/{}", args.branch);
+    let tip = build_facts(&git.run(&["cat-file", "blob", &format!("{branch}:build.yaml")])?)?;
+    println!("tip\t{}\t{:016x}\t{}", tip.version, tip.manifest, tip.date);
+    let (from, to) = (list.checkout()?, list.upstream()?);
+    let listed = list.added(&from, &to, LIVE_REALM)?;
+    let appended = manifests(&git, &branch)?;
+    let cdn = cdn_at(args.cdn_host.as_deref());
+    let mut new = 0;
+    for build in listed.iter().filter(|b| !appended.contains(&b.manifest)) {
+        let date = cdn.published(build.manifest, &args.manifests)?;
+        println!("new\t{}\t{:016x}\t{date}", build.version, build.manifest);
+        new += 1;
+    }
+    tracing::info!("the list's commits {}..{}: {} {LIVE_REALM} builds, {new} new", &from[..9], &to[..9], listed.len());
+    Ok(())
+}
+
+/// A build's facts: the history's realm is `LIVE_REALM` alone.
+fn facts_of(version: &str, manifest: u64, date: &str) -> Result<BuildFacts> {
+    let mut parts = version.split('.').map(str::parse::<u16>);
     let (Some(Ok(season)), Some(Ok(patch))) = (parts.next(), parts.next()) else {
-        bail!("{}: a version is season.patch.build", args.version);
+        bail!("{version}: a version is season.patch.build");
     };
-    let manifest = hex_id(&args.manifest)?;
-    let facts = BuildFacts {
-        version: args.version.clone(),
+    Ok(BuildFacts {
+        version: version.to_string(),
         patch: format!("{season}.{patch}"),
         manifest,
         rads: None,
-        date: args.date.clone(),
+        date: date.to_string(),
         legacy_bins: legacy_bins(season, patch),
-        realms: args.realms.clone(),
-    };
+        realms: vec![LIVE_REALM.to_string()],
+    })
+}
+
+fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let git = Git::open(&args.repo)?;
+    let branch = format!("refs/heads/{}", args.branch);
+    if let Some(start) = &args.start {
+        let commit = git.rev_parse(&format!("{start}^{{commit}}"))?;
+        git.reset_ref(&branch, &commit)?;
+    }
+    let manifest = hex_id(&args.manifest)?;
+    if manifests(&git, &branch)?.contains(&manifest) {
+        bail!("{} already holds manifest {manifest:016x}", args.branch);
+    }
     let inputs = Inputs::open(&args.sources)?;
+    let version = match &args.version {
+        Some(version) => version.clone(),
+        None => {
+            let list = ManifestList::open(&args.list)?;
+            let listed = list.added(&list.checkout()?, &list.upstream()?, LIVE_REALM)?;
+            listed.into_iter().find(|b| b.manifest == manifest).map(|b| b.version).with_context(|| {
+                format!("manifest {manifest:016x} is not among the {LIVE_REALM} builds the manifest list added after its checkout; give --version")
+            })?
+        }
+    };
+    let date = match &args.date {
+        Some(date) => date.clone(),
+        None => inputs.published(manifest)?,
+    };
+    let facts = facts_of(&version, manifest, &date)?;
     let started = Instant::now();
     let appended = append(&git, &args.branch, &facts, &inputs.manifest(manifest)?, &inputs.source(), pool)?;
     log(&facts, &appended, started, Downloaded::default(), inputs.downloaded());

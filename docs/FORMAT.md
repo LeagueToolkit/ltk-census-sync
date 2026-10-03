@@ -121,7 +121,9 @@ realms:
 - `manifest`: the RMAN manifest id, 16 hex. `source: "rman"` says it is one.
 - `date`: the day the manifest was published (its `Last-Modified`), UTC.
 - `legacyBins`: whether the build's bins use the property-kind numbering of builds before 10.8.
-- `realms`: the live realms that shipped the build, sorted.
+- `realms`: the live realms that shipped the build, sorted. An append writes `NA1`, the one realm
+  census-sync follows ([SOURCES.md](SOURCES.md), "Live builds"); the builds up to 16.19 list the
+  realms the export knew to have shipped them, which for 209 of them is `NA1` alone.
 
 8.20 to 9.1 are `source: "rads"`, read from Riot's older RADS distribution: no RMAN manifest exists
 for them, so `manifest` is XXH64 of `rads/<realm>/<solution>/<version>`, `solution`, `release` and

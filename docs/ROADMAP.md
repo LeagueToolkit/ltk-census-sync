@@ -48,9 +48,6 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
   of the next one is appended and never move it (a later hotfix lands after the tag), or move the
   tag to each new build of its patch (a reader has to fetch tags with `--force`). The first keeps
   tags immutable and is the one proposed.
-- **Realm notes.** What a note in `refs/notes/realms` holds when a realm adopts a build after it was
-  appended: proposed, the full sorted realm list as of the note, one line, so the newest note is
-  the answer.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
 - **How much the chunk cache keeps.** A build's chunks are almost never read again by the next
