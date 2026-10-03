@@ -11,7 +11,7 @@ use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
-use sync_history::{append, build_facts, manifests, Appended, Git};
+use sync_history::{append, build_facts, check, manifests, Appended, Git};
 use sync_source::{
     BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, ManifestList, LIVE_REALM,
 };
@@ -33,6 +33,9 @@ enum Command {
     Status(StatusArgs),
     /// Append one build to the local history; no push.
     Append(AppendArgs),
+    /// Check the commits after a pushed one, before they are pushed: every file they add or change
+    /// by its kind, each message, and each tree against its build's manifest. Prints each problem.
+    Check(CheckArgs),
     /// Re-append builds of the history, each onto its published parent, and compare each tree and
     /// commit with the published one.
     Oracle(OracleArgs),
@@ -113,6 +116,20 @@ struct AppendArgs {
     date: Option<String>,
     /// The build's manifest id, 16 hex.
     manifest: String,
+}
+
+#[derive(Args)]
+struct CheckArgs {
+    /// The working clone of the history, a bare repository.
+    #[arg(long)]
+    repo: Utf8PathBuf,
+    #[command(flatten)]
+    sources: Sources,
+    /// The branch whose commits are checked.
+    #[arg(long, default_value = "history")]
+    branch: String,
+    /// The last commit already pushed: the commits after it on the branch are checked.
+    since: String,
 }
 
 #[derive(Args)]
@@ -212,6 +229,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Status(args) => run_status(&args),
         Command::Append(args) => run_append(&args, &pool),
+        Command::Check(args) => run_check(&args, &pool),
         Command::Oracle(args) => run_oracle(&args, &pool),
         Command::Verify(args) => run_verify(&args, &pool),
         Command::Rebuild(args) => run_rebuild(&args, &pool),
@@ -292,6 +310,45 @@ fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let started = Instant::now();
     let appended = append(&git, &args.branch, &facts, &inputs.manifest(manifest)?, &inputs.source(), pool)?;
     log(&facts, &appended, started, Downloaded::default(), inputs.downloaded());
+    Ok(())
+}
+
+fn run_check(args: &CheckArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let git = Git::open(&args.repo)?;
+    let branch = format!("refs/heads/{}", args.branch);
+    let base = git.rev_parse(&format!("{}^{{commit}}", args.since))?;
+    if git.run(&["merge-base", "--is-ancestor", &base, &branch]).is_err() {
+        bail!("{} is not on {}", args.since, args.branch);
+    }
+    let range = format!("{base}..{branch}");
+    let commits: Vec<String> = git.run(&["rev-list", "--reverse", "--first-parent", &range])?.lines().map(str::to_string).collect();
+    let inputs = Inputs::open(&args.sources)?;
+    let source = inputs.source();
+    let mut failed = 0;
+    for (i, commit) in commits.iter().enumerate() {
+        let started = Instant::now();
+        let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{commit}:build.yaml")])?)?;
+        let checked = check(&git, commit, &inputs.manifest(facts.manifest)?, &source, pool)?;
+        for problem in &checked.problems {
+            println!("{}\t{}\t{problem}", &commit[..12], facts.version);
+        }
+        tracing::info!(
+            "{}/{} {} {}: {} files checked, {} WADs against their tables, {} problems ({:.1}s)",
+            i + 1,
+            commits.len(),
+            facts.version,
+            &commit[..12],
+            checked.files,
+            checked.wads,
+            checked.problems.len(),
+            started.elapsed().as_secs_f64()
+        );
+        failed += usize::from(!checked.problems.is_empty());
+    }
+    if failed > 0 {
+        bail!("{failed} of {} commits have problems", commits.len());
+    }
+    tracing::info!("{} commits after {} on {}: every check passes", commits.len(), args.since, args.branch);
     Ok(())
 }
 

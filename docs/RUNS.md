@@ -254,3 +254,13 @@ published history was not checked.
   (`4d2a50d5edab724a`, 2026-09-28).
 - **16.19.8217343 appended** onto a scratch branch from `history`, its facts from the list and the
   CDN: 0 of 4,047 WADs changed, so `build.yaml` alone; 16.8 MB downloaded, the manifest; 2.5 s.
+
+## The checks on published commits (2026-10-03)
+
+- **What.** `census-sync check 16.17` on `history`: the four builds of 16.18 and 16.19.8207193 as
+  published, against their manifests, the changed WADs' tables from the chunk cache and the CDN.
+- **Result.** Every check passes on all five. The largest, 16.18.8159717 and 16.19.8207193, change
+  42,494 and 47,961 files and 393 and 499 WADs, and take 4.5 s and 7.8 s.
+- **The file checks alone**, over every 20th file of the tip and every `build.yaml` and
+  `_wad.yaml`: 74,449 files, 23,015 of them `.rito`, all pass, in 10 s on one thread.
+- **16.19.8217343**, appended onto a scratch branch, passes too.
