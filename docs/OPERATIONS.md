@@ -1,8 +1,9 @@
 # Operations
 
 Running census-sync: the clone it works in, what a run does end to end, where it runs, and what
-happens when something fails. `append` and `oracle` are written; the other commands are planned
-([ROADMAP.md](ROADMAP.md)), and this states how they are meant to behave.
+happens when something fails. `push` and `run` are not written: a run is by hand for now (the
+README, "Running it locally"), and this states how the two are meant to behave once they are
+([ROADMAP.md](ROADMAP.md)).
 
 ## The working clone
 

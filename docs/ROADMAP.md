@@ -34,13 +34,17 @@ Passes the oracle over one patch with the CDN as the only source. Done: the four
 `census-sync status`. Done: it lists 16.19.8217343 and 16.19.8230722 after the tip
 ([RUNS.md](RUNS.md)).
 
-**6. Checks and pushing.** `census-sync check` and `push`, against a stand-in remote first. Then the
-builds since 16.19, appended, checked, and pushed to the real history by the user.
+**6. Checks, and runs by hand.** `census-sync check`, and the steps of a run by hand in the README:
+status, append, check, `git push`, and the list's checkout moved on (decided 2026-10-03: runs are
+by hand for now). Then the builds since 16.19, appended, checked, and pushed to the real history by
+the user. Done: `check` passes the published builds of 16.18 and 16.19 ([RUNS.md](RUNS.md)).
 
-**7. On a schedule.** `census-sync run` from cron in a jail on a NAS, with a deploy key.
+**7. On a schedule, when someone wants it.** `census-sync push`, the branch and its tags, against a
+stand-in remote first; `census-sync run`, a whole run in one command; and a schedule for it, cron in
+a jail on a NAS (decided 2026-10-02) or CI, with a deploy key.
 
 **Later.** The manifest code as an `ltk_rman` crate of the LeagueToolkit family, which this
-workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS.
+workspace then depends on.
 
 ## Open
 
