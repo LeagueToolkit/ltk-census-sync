@@ -7,12 +7,14 @@
 
 mod append;
 mod builds;
+mod check;
 mod error;
 mod git;
 mod tip;
 
 pub use append::{append, Appended};
 pub use builds::manifests;
+pub use check::{check, Checked};
 pub use error::Error;
 pub use git::{FastImport, Git};
 pub use tip::{build_facts, checksum, is_own_file, wad_ids, Tip, TipWad};

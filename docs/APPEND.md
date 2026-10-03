@@ -72,13 +72,19 @@ rewritten under a changed bin costs nothing.
 
 ## Before a push
 
-The commit is checked, and pushed only if every check passes; otherwise the branch is reset to the
-old tip and the run stops ([OPERATIONS.md](OPERATIONS.md)):
+Each commit not yet pushed is checked against its parent and its build's manifest, and pushed
+only if every check passes; otherwise the run stops and nothing is pushed
+([OPERATIONS.md](OPERATIONS.md)):
 
-- every new or changed YAML file validates against the schema `census.yaml` names for it;
-- every `.rito` parses back with ltk_ritobin;
-- the tree is complete: every `.wad.client` of the manifest has its `_wad.yaml`, and every entry of
-  every changed WAD has its own file.
+- it changes `build.yaml` and files under `files/` only;
+- every YAML file it adds or changes validates against the schema the tree's `census.yaml` names
+  for it;
+- every `.rito` it adds or changes parses with ltk_ritobin, with no error and no diagnostic, into a
+  bin that prints as the same text;
+- its message, author and date are the ones its `build.yaml` writes;
+- the tree is complete: every `.wad.client` of the manifest has its `_wad.yaml`, holding the
+  manifest's file id and tags, no other WAD has one, and every WAD the commit changed holds an own
+  file for each entry of its table, read again from the build's bytes, and for no other entry.
 
 ## Decisions an append forces
 
