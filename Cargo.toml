@@ -44,6 +44,9 @@ xxhash-rust = { version = "0.8", features = ["xxh64", "xxh3"] }
 
 # Downloads from Riot's CDN: blocking, so a run's parallelism stays rayon's (docs/ROADMAP.md).
 ureq = "3"
+# The chunk cache: frames keyed by hash scheme, uncompressed size and id, in one LSM store rather
+# than a file per chunk (docs/SOURCES.md). Frames are zstd already, so no block compression.
+fjall = { version = "3.1", default-features = false }
 # Every filesystem call: its errors name the path (clippy.toml forbids `std::fs`).
 fs-err = "3"
 # Filesystem paths as UTF-8. Paths inside the history are strings, not these.

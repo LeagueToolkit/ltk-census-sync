@@ -27,6 +27,16 @@ impl ChunkHash {
         }
     }
 
+    /// The chunking parameter set version this hash belongs to: Riot's number for it.
+    pub fn version(self) -> u8 {
+        match self {
+            Self::Sha512 => 1,
+            Self::Sha256 => 2,
+            Self::RitoHkdf => 3,
+            Self::Blake3 => 4,
+        }
+    }
+
     /// The id of a chunk's uncompressed bytes.
     pub fn id_of(self, data: &[u8]) -> u64 {
         match self {
@@ -60,6 +70,9 @@ mod tests {
         assert_eq!(ChunkHash::Blake3.id_of(b"abc"), 0x3351_4638_acb3_3764);
         assert_eq!(ChunkHash::Sha256.id_of(b"abc"), 0xeacf_018f_bf16_78ba);
         assert_eq!(ChunkHash::Sha512.id_of(b"abc"), 0xba7a_6193_a135_afdd);
+        for version in 1..=4 {
+            assert_eq!(ChunkHash::from_version(version).map(ChunkHash::version), Some(version));
+        }
         assert_eq!(ChunkHash::from_version(0), None);
         assert_eq!(ChunkHash::from_version(5), None);
     }

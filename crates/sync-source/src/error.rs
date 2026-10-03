@@ -22,6 +22,9 @@ pub enum Error {
     /// A download from the CDN that failed, or brought back something else.
     #[error("{url}: {message}")]
     Download { url: String, message: String },
+    /// The chunk cache could not be opened, read or written.
+    #[error("chunk cache: {0}")]
+    Cache(#[from] fjall::Error),
     /// A WAD whose header or table does not have the shape of one.
     #[error("WAD: {0}")]
     Wad(String),

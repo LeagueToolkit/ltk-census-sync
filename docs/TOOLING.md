@@ -25,6 +25,9 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
 - **git** is a process, not a library: `ls-tree`, `cat-file --batch`, `fast-import`, `push`.
 - **`ureq`** for downloads from Riot's CDN: blocking with no async runtime, which suits a tool whose
   parallelism is rayon's.
+- **`fjall`** for the chunk cache: millions of frames in a few large files rather than a file each,
+  keyed by hash scheme, uncompressed size and chunk id. Without its default `lz4` feature, since
+  the frames are zstd already.
 - **Errors**: `thiserror` in the library crates, `anyhow` in `sync-cli`.
 - **`camino`** for filesystem paths (the clone, the cache, logs). A path in the history is a string:
   it names a tree entry, not a file on disk.
