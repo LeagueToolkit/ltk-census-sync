@@ -25,8 +25,10 @@ behind the builds and date nothing.
 digits). It is one file of about 30 MB, so a run that cannot trust a mirror's file name pays that
 once a build.
 
-**The date** is the day the manifest was published: its `Last-Modified` from Riot's CDN, as UTC.
-Recorded when the manifest is first fetched, since nothing in the manifest dates it.
+**The date** is the day the manifest was published: its `Last-Modified` from Riot's CDN, as UTC
+(the day in California or in Central Europe differs for a build published near midnight, and the
+published history follows UTC, [RUNS.md](RUNS.md)). Asked once, by a `HEAD` of the manifest, and
+kept beside the manifests as `<MANIFEST ID>.date`, since nothing in the manifest dates it.
 
 ## RMAN manifests
 

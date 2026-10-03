@@ -1,4 +1,5 @@
-//! Riot's CDN (`docs/SOURCES.md`, "Bundles and the CDN"): manifests and chunks. A read's chunks are fetched by multi-range requests to their bundles, the spans of
+//! Riot's CDN (`docs/SOURCES.md`, "Bundles and the CDN"): manifests, the day each was published,
+//! and chunks. A read's chunks are fetched by multi-range requests to their bundles, the spans of
 //! one bundle in one request, and read through the chunk cache, so a chunk is downloaded once.
 
 use std::collections::{BTreeMap, HashMap};
@@ -58,11 +59,18 @@ pub struct CdnSource {
     cache: ChunkCache,
 }
 
+#[derive(Clone, Copy)]
+enum Method {
+    Get,
+    Head,
+}
+
 /// A response, read whole.
 struct Answer {
     status: u16,
     content_type: Option<String>,
     content_range: Option<String>,
+    last_modified: Option<String>,
     body: Vec<u8>,
 }
 
@@ -105,7 +113,7 @@ impl Cdn {
         }
         let url = self.manifest_url(id);
         let fail = |message: String| Error::Download { url: url.clone(), message };
-        let answer = self.get(&url, None)?;
+        let answer = self.ask(Method::Get, &url, None)?;
         if answer.status != 200 {
             return Err(fail(format!("status {}", answer.status)));
         }
@@ -117,6 +125,25 @@ impl Cdn {
         Ok(manifest)
     }
 
+    /// The day a manifest was published, `YYYY-MM-DD`: its `Last-Modified`, in UTC. Asked once and
+    /// kept in `dir/<ID>.date`, since nothing in the manifest dates it.
+    pub fn published(&self, id: u64, dir: &Utf8Path) -> Result<String, Error> {
+        let path = dir.join(format!("{id:016X}.date"));
+        if path.is_file() {
+            return Ok(fs_err::read_to_string(&path)?.trim().to_string());
+        }
+        let url = self.manifest_url(id);
+        let fail = |message: String| Error::Download { url: url.clone(), message };
+        let answer = self.ask(Method::Head, &url, None)?;
+        if answer.status != 200 {
+            return Err(fail(format!("status {}", answer.status)));
+        }
+        let header = answer.last_modified.ok_or_else(|| fail("no Last-Modified".into()))?;
+        let date = http_date(&header).ok_or_else(|| fail(format!("Last-Modified {header:?}")))?;
+        write(&path, format!("{date}\n").as_bytes())?;
+        Ok(date)
+    }
+
     fn manifest_url(&self, id: u64) -> String {
         format!("{}/channels/public/releases/{id:016X}.manifest", self.manifest_host)
     }
@@ -124,7 +151,7 @@ impl Cdn {
     /// One request for these spans of the bundle at `url`.
     fn ranges(&self, url: &str, spans: &[(u64, u64, Range<usize>)]) -> Result<Ranges, Error> {
         let list: Vec<String> = spans.iter().map(|(start, end, _)| format!("{start}-{}", end - 1)).collect();
-        let answer = self.get(url, Some(&format!("bytes={}", list.join(","))))?;
+        let answer = self.ask(Method::Get, url, Some(&format!("bytes={}", list.join(","))))?;
         let fail = |message: String| Error::Download { url: url.to_string(), message };
         match answer.status {
             200 => Ok(Ranges::whole(answer.body)),
@@ -137,11 +164,11 @@ impl Cdn {
         }
     }
 
-    /// A GET, tried again after a failure on the way or a server error.
-    fn get(&self, url: &str, range: Option<&str>) -> Result<Answer, Error> {
+    /// A request, tried again after a failure on the way or a server error.
+    fn ask(&self, method: Method, url: &str, range: Option<&str>) -> Result<Answer, Error> {
         let mut attempt = 1;
         loop {
-            match self.try_get(url, range) {
+            match self.try_ask(method, url, range) {
                 Ok(answer) => return Ok(answer),
                 Err(message) if attempt < ATTEMPTS => {
                     tracing::warn!("{url}: {message}; try {} of {ATTEMPTS}", attempt + 1);
@@ -153,8 +180,11 @@ impl Cdn {
         }
     }
 
-    fn try_get(&self, url: &str, range: Option<&str>) -> Result<Answer, String> {
-        let mut request = self.agent.get(url);
+    fn try_ask(&self, method: Method, url: &str, range: Option<&str>) -> Result<Answer, String> {
+        let mut request = match method {
+            Method::Get => self.agent.get(url),
+            Method::Head => self.agent.head(url),
+        };
         if let Some(range) = range {
             request = request.header("Range", range);
         }
@@ -165,10 +195,10 @@ impl Cdn {
             return Err(format!("status {status}"));
         }
         let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
-        let (content_type, content_range) = (header("content-type"), header("content-range"));
+        let (content_type, content_range, last_modified) = (header("content-type"), header("content-range"), header("last-modified"));
         let body = response.body_mut().with_config().limit(MAX_BODY).read_to_vec().map_err(|e| e.to_string())?;
         self.counts.bytes.fetch_add(body.len() as u64, Ordering::Relaxed);
-        Ok(Answer { status, content_type, content_range, body })
+        Ok(Answer { status, content_type, content_range, last_modified, body })
     }
 }
 
@@ -181,6 +211,17 @@ fn write(path: &Utf8Path, bytes: &[u8]) -> Result<(), Error> {
     fs_err::write(&part, bytes)?;
     fs_err::rename(&part, path)?;
     Ok(())
+}
+
+/// An HTTP date, `Wed, 13 May 2026 23:33:33 GMT`, as its day in UTC, `2026-05-13`.
+fn http_date(value: &str) -> Option<String> {
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let parts: Vec<&str> = value.split_whitespace().collect();
+    let [_, day, month, year, _, "GMT"] = parts[..] else { return None };
+    let day: u8 = day.parse().ok().filter(|d| (1..=31).contains(d))?;
+    let month = MONTHS.iter().position(|m| *m == month)? + 1;
+    let year: u16 = year.parse().ok().filter(|_| year.len() == 4)?;
+    Some(format!("{year}-{month:02}-{day:02}"))
 }
 
 impl CdnSource {
@@ -289,5 +330,19 @@ impl ChunkSource for CdnSource {
             out.push(data);
         }
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_http_date_is_its_day_in_utc() {
+        assert_eq!(http_date("Wed, 13 May 2026 23:33:33 GMT").as_deref(), Some("2026-05-13"));
+        assert_eq!(http_date("Thu, 12 Feb 2026 00:12:53 GMT").as_deref(), Some("2026-02-12"));
+        assert_eq!(http_date("Wed, 13 May 2026 23:33:33 +0200"), None);
+        assert_eq!(http_date("Wed, 32 May 2026 23:33:33 GMT"), None);
+        assert_eq!(http_date("13 May 2026"), None);
     }
 }

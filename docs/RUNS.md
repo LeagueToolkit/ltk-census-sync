@@ -231,6 +231,15 @@ published history was not checked.
 - **The cache.** 1.6 GB on disk after the runs, for about 1.7 GB downloaded; the four manifests,
   64 MB.
 
+## A build's date (2026-10-03)
+
+- **What.** The `Last-Modified` of the manifests of the 70 builds from 16.4 to 16.19, from Riot's
+  CDN, against the `date` the history holds for each.
+- **Result.** The day in UTC is the published date for 70 of 70; the day in California for 45, the
+  day in Central Europe for 48. The 25 published between 00:00 and 07:00 UTC are the ones the day
+  in California puts a day earlier. The manifest list's commit adding a build came one to three
+  days after it: the list updates once a day, at 16:00 UTC.
+
 ## NA1 against the history (2026-10-03)
 
 - **What.** The manifests under `LoL/NA1/windows/lol-game-client/` for 16.10 to 16.19 in the

@@ -330,3 +330,15 @@ fn a_manifest_is_downloaded_once_and_checked_against_its_id() {
     assert!(!manifests.join(format!("{other:016X}.manifest")).exists());
 }
 
+#[test]
+fn the_day_a_manifest_was_published_is_its_last_modified_in_utc_asked_once() {
+    let (host, seen) = serve(|_, _| b"HTTP/1.1 200 OK\r\nLast-Modified: Wed, 13 May 2026 23:33:33 GMT\r\nContent-Length: 0\r\n\r\n".to_vec());
+    let dir = tempfile::tempdir().unwrap();
+    let manifests = Utf8PathBuf::from_path_buf(dir.path().join("manifests")).unwrap();
+    let cdn = Cdn::new().with_host(&host);
+    assert_eq!(cdn.published(0xAB, &manifests).unwrap(), "2026-05-13");
+    assert_eq!(fs_err::read_to_string(manifests.join("00000000000000AB.date")).unwrap(), "2026-05-13\n");
+    assert_eq!(cdn.published(0xAB, &manifests).unwrap(), "2026-05-13");
+    assert_eq!(*seen.lock().unwrap(), [("/channels/public/releases/00000000000000AB.manifest".to_string(), None)]);
+    assert_eq!(cdn.downloaded().requests, 1);
+}
