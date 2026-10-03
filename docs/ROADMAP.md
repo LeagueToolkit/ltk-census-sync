@@ -55,9 +55,6 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
   anything.
 - **`census.yaml`'s description** names the tool that wrote the first history. It is format text,
   so it stays as it is in format 2.
-- **`main`'s README** says the history is kept up by `census append`. `main` is in no `history`
-  tree, so a new README is a child commit on `main`, with no effect on the oracle; it goes with
-  census-sync's first push.
 - **Which parse failures stop a run.** An entry whose bytes do not parse for their kind gets no
   section, as in the history, and the append goes on; [OPERATIONS.md](OPERATIONS.md) has a run stop
   for a file a writer cannot parse in a way it has not seen before. Which failures count as new is

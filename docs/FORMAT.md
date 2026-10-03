@@ -11,8 +11,9 @@ carries the format number, and a reader checks it before parsing.
 
 ## Branches, commits, tags
 
-- **`main`**, the default branch, holds only `README.md` (`sync-format`'s `main/README.md`), one
-  parentless commit, so a plain clone checks out one file.
+- **`main`**, the default branch, holds only `README.md` and `LICENSE` (`sync-format`'s `main/`),
+  so a plain clone checks out two small files. It shares no commit with `history`; its commits
+  change those two files alone, on top of each other.
 - **`history`** holds the builds, one commit per build. Its first commit adds `.gitattributes`
   (`* -text`): every file is LF and full of hashes, and a checkout that rewrote line endings would
   corrupt them.

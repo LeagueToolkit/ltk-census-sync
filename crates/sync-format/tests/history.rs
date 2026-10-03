@@ -16,7 +16,7 @@ use std::process::{Command, Stdio};
 use sha2::{Digest, Sha256};
 use sync_format::{
     build_yaml, commit_message, commit_time, entry_files, kind_of, wad_yaml, BuildFacts, Rads, AUTHOR, CENSUS_YAML,
-    GITATTRIBUTES, KIND_LINK, MAIN_README, SCHEMAS,
+    GITATTRIBUTES, KIND_LINK, MAIN_LICENSE, MAIN_README, SCHEMAS,
 };
 
 fn env(name: &str) -> String {
@@ -149,10 +149,11 @@ fn every_commit_has_the_build_yaml_message_and_time_of_its_build() {
 #[ignore = "needs CENSUS_SYNC_HISTORY"]
 fn the_fixed_texts_are_the_published_ones() {
     let history = History::open();
-    let mut names = vec!["history:.gitattributes".to_string(), "history:census.yaml".to_string(), "main:README.md".to_string()];
+    let mut names =
+        vec!["history:.gitattributes".to_string(), "history:census.yaml".to_string(), "main:README.md".to_string(), "main:LICENSE".to_string()];
     names.extend(SCHEMAS.iter().map(|(path, _)| format!("history:{path}")));
     let published = history.cat(&names);
-    let mut ours = vec![GITATTRIBUTES, CENSUS_YAML, MAIN_README];
+    let mut ours = vec![GITATTRIBUTES, CENSUS_YAML, MAIN_README, MAIN_LICENSE];
     ours.extend(SCHEMAS.iter().map(|(_, text)| *text));
     let mut failed = 0;
     for ((name, published), ours) in names.iter().zip(&published).zip(ours) {

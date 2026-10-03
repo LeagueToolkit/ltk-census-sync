@@ -14,5 +14,8 @@ pub const SCHEMAS: [(&str, &str); 3] = [
     ("schema/wad.schema.json", include_str!("../schema/wad.schema.json")),
 ];
 
-/// `README.md`, the one file on `main`.
+/// `README.md` on `main`.
 pub const MAIN_README: &str = include_str!("../main/README.md");
+
+/// `LICENSE` on `main`: the data in the public domain, without warranty.
+pub const MAIN_LICENSE: &str = include_str!("../main/LICENSE");
