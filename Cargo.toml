@@ -13,17 +13,25 @@ sync-format = { path = "crates/sync-format" }
 sync-source = { path = "crates/sync-source" }
 sync-history = { path = "crates/sync-history" }
 
-# LeagueToolkit crates: every League format with an ltk crate is read through it.
+# LeagueToolkit crates: every League format with an ltk crate is read through it. What a parser
+# makes of an entry's bytes is written into the history (ltk_file's magic table is every entry's
+# `kind`), so each is pinned to the version of the export that wrote it, and moving one is a writer
+# change (docs/TOOLING.md).
 ltk_hash = "0.4"
 ltk_primitives = "0.3"
 ltk_io_ext = "0.4.4"
-ltk_file = "0.2.11"
-ltk_wad = "0.5.4"
+ltk_file = "=0.2.11"
+ltk_wad = "=0.5.7"
 ltk_meta = "0.8.6"
-ltk_mesh = "0.4.6"
-ltk_anim = "0.3.7"
-ltk_texture = "0.6.1"
+ltk_mesh = "=0.4.6"
+ltk_anim = "=0.3.9"
+ltk_texture = "=0.6.4"
 ltk_ritobin = "0.9.0"
+# The vector type of ltk_mesh's accessors: the major ltk_mesh builds against.
+glam = "0.27"
+# A `.dds` entry's `texture` facts. Its format names are this crate's, so it is pinned like the
+# ltk crates.
+ddsfile = "=0.5.2"
 
 # Manifests: a flatbuffer body, zstd chunks, four chunk-hash schemes (docs/SOURCES.md).
 flatbuffers = "25.12"

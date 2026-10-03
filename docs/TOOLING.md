@@ -8,10 +8,20 @@ All in `[workspace.dependencies]`; a crate names what it uses with `workspace = 
 first, else a git dependency pinned by `rev`, never a committed path dependency.
 
 - **LeagueToolkit crates** for every format they cover ([SOURCES.md](SOURCES.md), "Formats read").
+- **The parsers are writers.** What `ltk_file`, `ltk_wad`, `ltk_mesh`, `ltk_anim`, `ltk_texture`
+  and `ddsfile` make of an entry's bytes is written into the history: `ltk_file`'s magic table is
+  every entry's `kind`, `ddsfile`'s format names are a `dds` entry's `format`. Each is pinned with
+  `=` to the version of the export that wrote the history, so `cargo update` cannot move it, and
+  moving one is a writer change. After any `cargo update`, `cargo tree -d` lists no `ltk_*` crate
+  twice.
+- **`ltk_file` 0.2.11 panics on three bytes**: its JPEG pattern declares three and reads four.
+  `kind_of` gives three bytes the kinds of its patterns that fit them, in its order. No entry of
+  the history has three bytes.
 - **ltk_ritobin is patched** to LeagueToolkit/league-toolkit#269 at `521a875` until it is released,
   with `ltk_meta`, `ltk_hash`, `ltk_primitives` and `ltk_io_ext` from the same commit, so the build
-  holds one copy of each. The bin entries of the history are its `PrintCanonical` text; moving the
-  pin is a writer change and passes the oracle first.
+  holds one copy of each. The bin entries of the history are its `PrintCanonical` text, of objects
+  read by that commit's `BinObject::from_reader`; moving the pin is a writer change and passes the
+  oracle first. A "patch was not used" warning from cargo means one of the five is unpatched.
 - **git** is a process, not a library: `ls-tree`, `cat-file --batch`, `fast-import`, `push`.
 - **Errors**: `thiserror` in the library crates, `anyhow` in `sync-cli`.
 - **`camino`** for filesystem paths (the clone, the cache, logs). A path in the history is a string:
@@ -56,7 +66,22 @@ and `cargo test --workspace --locked`.
   in two bundles with different compressed sizes, both decompressing to the same verified bytes;
   a multi-range request past the span cap, answered with the whole bundle.
 - **Writers** are tested against files from the published history: a sample of entries per kind,
-  each rendered from its bytes and compared with the blob the history holds.
+  each rendered from its bytes and compared with the blob the history holds. The game's bytes are
+  not committed, so these tests (`sync-format/tests/history.rs`) are ignored by default and run on
+  a machine that has them:
+
+  ```
+  CENSUS_SYNC_HISTORY=<bare clone> CENSUS_SYNC_SAMPLES=<dir> cargo test -p sync-format --test history -- --ignored
+  ```
+
+  The samples directory holds each entry's bytes in a file named for its SHA-256, and
+  `entries.txt`, one `<commit> <path of the entry's own file>` per line. The same tests render
+  every commit's `build.yaml`, message and time, and every `_wad.yaml` of the tip, which need no
+  bytes.
+- **The kind audit.** The oracle reads only the entries that changed in its range, so a change to
+  `kind_of` or to `ltk_file` also runs the writer tests over every tip entry of a kind that rests on
+  a guess or is rare (`inibin`, `lightgrid`, `tga`, `png`, `stringtable`) and every entry with no
+  kind, with a sample of each other kind.
 
 ## The oracle
 

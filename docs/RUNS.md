@@ -52,3 +52,23 @@ A separate reader, with its own strict structs that reject unknown fields and lt
   neither `objects` nor a folder.
 - **Found.** A bin with no objects has `links` and no `objects` key: 3,105 bins at 16.19, 716
   distinct. Documented in [FORMAT.md](FORMAT.md) rather than changed.
+
+## The writers against the history (2026-10-03)
+
+`sync-format`, ported without the database, against the published `history` (`372cee97`), each
+entry's bytes read from the archive of past builds (`sync-format/tests/history.rs`).
+
+- **Commits.** All 755: `build.yaml`, message and time identical.
+- **WADs.** All 4,047 `_wad.yaml` of the tip render identically from their fields.
+- **Entries.** 70 entries of seven WADs, every kind they hold and the bin edge cases (`PTCH`,
+  links without objects, map22's bin of 18,954 entries): every file identical, 19,003 `.rito`
+  among them.
+- **The kind audit.** 6,679 entries of the tip: every entry of kind `inibin` (1,589), `lightgrid`
+  (174), `tga` (69), `png` (33) and `stringtable` (84), every entry with no kind (4,252), and 40 of
+  each other kind. `kind_of` gives each its recorded kind, and every file is identical. 486 s in a
+  debug build. Two sampled entries were left out: their bytes could not be read from the archive.
+- **C++ ritobin.** The 10 sample bins through `ritobin_cli -k`: every link list and all 19,003
+  entries equal to the `.rito` files.
+- **Found.** No entry of kind `link` and no joint parent written as an ordinal, at 16.19 or at the
+  first patch of each season from 9 to 15. Both rules are in [FORMAT.md](FORMAT.md) and covered by
+  tests built from synthetic bytes.

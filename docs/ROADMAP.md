@@ -14,11 +14,12 @@ file with its `links` and its `skeleton`, `mesh`, `texture`, `bank` or `objects`
 ritobin text; and the facts each is written from, read from an entry's bytes -- a bin split into
 its links and objects, a bank's media and the wems its events reach, a skeleton's joints, a mesh's
 submeshes and position hashes, a texture's format and top mip. Tested against blobs of the
-published history, entry by entry.
+published history, entry by entry. Done ([RUNS.md](RUNS.md)).
 
 **2. `sync-source`: manifests and chunks.** The RMAN manifest reader, keeping each chunk's bundle
 layout; the four chunk-hash schemes; files and ranges rebuilt from chunks through `Read + Seek`;
-a WAD's table read from its front. A local merged bundle as the first chunk source, so the
+a WAD's table read from its front, and an entry's bytes from its stored ones (a link's as stored,
+undecoded). A local merged bundle as the first chunk source, so the
 oracle can run before the CDN source exists.
 
 **3. `sync-history` and `append`.** The tip's index, the batched blob reader, the fast-import

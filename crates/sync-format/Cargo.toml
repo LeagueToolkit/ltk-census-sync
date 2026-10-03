@@ -7,6 +7,22 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+ltk_file.workspace = true
+ltk_hash.workspace = true
+ltk_meta.workspace = true
+ltk_ritobin.workspace = true
+ltk_mesh.workspace = true
+ltk_anim.workspace = true
+ltk_texture.workspace = true
+glam.workspace = true
+ddsfile.workspace = true
+sha2.workspace = true
+xxhash-rust.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+fs-err.workspace = true
+pretty_assertions.workspace = true
 
 [lints]
 workspace = true

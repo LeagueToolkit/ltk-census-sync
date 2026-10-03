@@ -38,8 +38,8 @@ for builds and bytes, [docs/OPERATIONS.md](docs/OPERATIONS.md) for running it on
 
 ## Status
 
-Planned, not written yet: the workspace and its docs are in place, the code is next
-([docs/ROADMAP.md](docs/ROADMAP.md)).
+Being written ([docs/ROADMAP.md](docs/ROADMAP.md)). The writers (`sync-format`) reproduce the
+published history; the manifest and chunk reader and the append itself are next.
 
 ## Layout
 
