@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use common::{chunks_of, file_of};
-use sync_source::{open_frame, ChunkHash, ChunkSource, Error, FileReader, MergedBundle};
+use sync_source::{open_frame, BundleMirror, ChunkHash, ChunkRef, ChunkSource, Error, FileReader, Layers, MergedBundle};
 use xxhash_rust::xxh64::xxh64;
 
 fn text(len: usize) -> Vec<u8> {
@@ -116,4 +116,34 @@ fn write_part(path: &Utf8Path, frames: &[(u64, u32, &[u8])]) {
     data.extend(0xFFFF_FFFFu32.to_le_bytes());
     data.extend(b"RBUN");
     fs_err::write(path, data).unwrap();
+}
+
+#[test]
+fn a_mirror_reads_by_the_manifests_places_and_layers_fall_through() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let bytes = text(300);
+    let mut chunks = chunks_of(&bytes, 100);
+    // The first two chunks in bundle 0xB1, after 7 bytes of another chunk; the third in a bundle the
+    // mirror does not have.
+    let mut bundle = vec![0xEE; 7];
+    for (chunk, frame) in &mut chunks[..2] {
+        chunk.place.bundle = 0xB1;
+        chunk.place.offset = bundle.len() as u64;
+        chunk.place.compressed_size = frame.len() as u32;
+        bundle.extend(&*frame);
+    }
+    chunks[2].0.place.bundle = 0xB2;
+    let mirror = BundleMirror::new(&root);
+    let path = mirror.bundle_path(0xB1);
+    assert_eq!(path, root.join("channels").join("public").join("bundles").join("00000000000000B1.bundle"));
+    fs_err::create_dir_all(path.parent().unwrap()).unwrap();
+    fs_err::write(&path, &bundle).unwrap();
+
+    let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
+    assert!(matches!(mirror.frames(&refs[2..]), Err(Error::MissingChunk(_))));
+    let (memory, _) = file_of(&bytes, 100);
+    let layers = Layers::new(vec![&mirror, &memory]);
+    let mut file = FileReader::new(&layers, refs).unwrap();
+    assert_eq!(file.read_range(0, 300).unwrap(), bytes);
 }

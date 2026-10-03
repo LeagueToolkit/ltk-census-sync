@@ -187,6 +187,11 @@ impl Manifest {
         Ok(Self { id, params, files, chunks })
     }
 
+    /// A manifest made in code. Every chunk of every file has a place in `chunks`.
+    pub fn new(id: u64, params: Vec<ChunkingParams>, files: Vec<ManifestFile>, chunks: HashMap<u64, BundleChunk>) -> Self {
+        Self { id, params, files, chunks }
+    }
+
     /// Where a chunk is in this manifest's bundles.
     pub fn place(&self, chunk_id: u64) -> Option<BundleChunk> {
         self.chunks.get(&chunk_id).copied()

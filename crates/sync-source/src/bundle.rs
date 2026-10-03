@@ -140,7 +140,7 @@ fn read_toc(part: &Part) -> Result<Vec<(u64, u32)>, Error> {
 }
 
 /// Fills `buf` from `offset` without moving a cursor another thread shares.
-fn read_exact_at(file: &fs_err::File, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
+pub(crate) fn read_exact_at(file: &fs_err::File, offset: u64, buf: &mut [u8]) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         use fs_err::os::windows::fs::FileExt;

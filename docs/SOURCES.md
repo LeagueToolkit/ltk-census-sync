@@ -66,14 +66,22 @@ it ignores the header and sends the whole bundle, which is not an error, so requ
 
 ## Chunk sources
 
-A chunk is asked for **by id**, and each source finds it its own way:
+A chunk is asked for **by id**, and each source finds it its own way. The sources are asked in
+order, and a chunk comes from the first that holds it:
 
-- **The cache**: chunks already fetched, by id, on local disk. Checked first; what the CDN returns
-  is written back, so a chunk is downloaded once.
-- **The CDN**, by the layout of the manifest being read.
+- **The cache**: chunks already fetched, on local disk. Checked first; what the CDN returns is
+  written back, so a chunk is downloaded once. Whether it keeps chunks by id or whole bundles is
+  open ([ROADMAP.md](ROADMAP.md)).
+- **A mirror**: Riot's bundles kept whole at their CDN paths,
+  `channels/public/bundles/<BUNDLE ID>.bundle` under one directory, read by the layout of the
+  manifest being read, as from the CDN. The directory can be served over HTTP as a mirror of the
+  CDN.
+- **The CDN**, over https, by the layout of the manifest being read.
 - **A local merged bundle**, the form an archive of past builds keeps (rman's one bundle per part,
   with its own table from chunk id to location). Read by chunk id and its own table only, never
-  with a manifest's offsets, which describe another encoding.
+  with a manifest's offsets, which describe another encoding. The archive is not trusted more than
+  the CDN: it holds at least one chunk's bytes under another chunk's id ([RUNS.md](RUNS.md)), and
+  every chunk it gives is checked like any other.
 
 ## Files and ranges
 
