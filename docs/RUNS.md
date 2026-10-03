@@ -180,3 +180,53 @@ published history was not checked.
   five bad chunks first used by 16.4.7461248 were never read. Their entries kept the checksums of
   earlier builds, whose chunks verify, so neither the export nor an append read them. The
   published history from 16.4 to 16.9 is correct, and the fix of 16.10 to 16.19 is the whole fix.
+
+## Ranges against whole bundles (2026-10-03)
+
+- **What.** For each build of 16.10 to 16.19, the chunks an append reads (the changed WADs' tables
+  and every entry whose checksum moved), from the archive's manifests and WAD tables, against the
+  bundles that hold them. A bundle's size is where the last chunk the manifest's files use in it
+  ends, so a lower bound.
+- **Result.** 22.2 GB in 347,562 chunks over the 38 builds; the bundles holding them, each counted
+  at its first build, 180 GB. Of the chunks a build reads, 0.5% were read by an earlier build of
+  the range. The most spans one bundle needs in one build is 409 (16.15.7983109).
+
+| first build of the patch | chunks read | bundles holding them |
+| --- | --- | --- |
+| 16.10.7742490 | 1.4 GB | 21.0 GB |
+| 16.11.7787901 | 2.6 GB | 15.8 GB |
+| 16.12.7836998 | 1.3 GB | 23.2 GB |
+| 16.13.7888140 | 1.6 GB | 11.5 GB |
+| 16.14.7937003 | 2.7 GB | 29.1 GB |
+| 16.15.7983109 | 4.2 GB | 30.1 GB |
+| 16.16.8032921 | 2.7 GB | 19.7 GB |
+| 16.17.8104348 | 1.8 GB | 10.9 GB |
+| 16.18.8159717 | 1.6 GB | 15.9 GB |
+| 16.19.8207193 | 1.4 GB | 15.2 GB |
+
+## Riot's CDN and multi-range requests (2026-10-03)
+
+- **What.** Range requests over https to `lol.dyn.riotcdn.net` for bundle `8250C7AC12833936` of
+  16.19.8207193, from one machine. The answers name an Akamai edge in Vienna, with S3 behind it.
+- **Two spans.** `206`, `Content-Type: multipart/byteranges; boundary=` and 16 hex digits, no
+  `Content-Length`. Each part has a `Content-Type: binary/octet-stream` and a `Content-Range`, and
+  the body ends with the closing boundary.
+- **One span.** `206` with `Content-Range` and `Content-Length`, the bytes as the body.
+- **Many spans.** 128, 200, 257, 258, 259, 300, 400, 500, 700 and 1,000 spans of 10 bytes: a `206`
+  with parts every time, for `Range` headers of up to 18,000 characters. No whole-bundle answer.
+- The two-span and one-span answers are the fixtures of `sync-source/tests/cdn.rs`.
+
+## The oracle over 16.18 from the CDN (2026-10-03)
+
+- **What.** `census-sync oracle 16.17 4`: the four builds of 16.18, each onto its published parent,
+  with the CDN as the only source and an empty chunk cache, on 32 threads.
+- **First run.** Builds 2 to 4 identical, downloading 16.7, 35.2 and 21.3 MB. Build 1
+  (16.18.8159717) stopped after 89 s: one answer from bundle `C39764B4754F3A3C` held no part for a
+  chunk it was asked for (`022f5ea8d712a300`, 600 bytes at 13,918,891). The branch stayed at the
+  parent.
+- **Build 1 alone, onto an empty cache.** Identical: 1,655.9 MB downloaded in 15,474 requests,
+  83 s, for 15,731 entries of 393 WADs and 152,613 files written.
+- **The four again, onto the first run's cache.** 4 of 4 trees and commits identical, 18 s. Build 1
+  downloaded the 28.7 MB the stopped run lacked, in 48 requests; builds 2 to 4 downloaded nothing.
+- **The cache.** 1.6 GB on disk after the runs, for about 1.7 GB downloaded; the four manifests,
+  64 MB.

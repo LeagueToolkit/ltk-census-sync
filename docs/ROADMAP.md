@@ -27,7 +27,8 @@ writer, `census-sync append`. Passes the oracle over 16.10-16.19 appended onto 1
 archive's misplaced chunks, and `census-sync rebuild` writes the fix ([RUNS.md](RUNS.md)).
 
 **4. The CDN.** The CDN chunk source with multi-range requests, the chunk cache, recorded fixtures.
-Passes the oracle over one patch with the CDN as the only source.
+Passes the oracle over one patch with the CDN as the only source. Done: the four builds of 16.18
+([RUNS.md](RUNS.md)).
 
 **5. Finding builds.** The manifest list, the version, the date, the realms;
 `census-sync status`.

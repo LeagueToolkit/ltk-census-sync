@@ -39,9 +39,9 @@ for builds and bytes, [docs/OPERATIONS.md](docs/OPERATIONS.md) for running it on
 ## Status
 
 Being written ([docs/ROADMAP.md](docs/ROADMAP.md)). The writers (`sync-format`) reproduce the
-published history, the manifest and chunk reader (`sync-source`) reads past builds from an
-archive, and `census-sync append` reproduces the published builds of 16.10 to 16.19; the CDN as a
-chunk source is next.
+published history, the manifest and chunk reader (`sync-source`) reads builds from Riot's CDN by
+range through a chunk cache, and `census-sync append` reproduces the published builds of 16.10 to
+16.19, those of 16.18 with the CDN as the only source; finding new builds is next.
 
 ## Layout
 
