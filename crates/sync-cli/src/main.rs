@@ -2,7 +2,7 @@
 //! result and pushes it (`docs/OPERATIONS.md`). The commands not written yet are planned in
 //! `docs/ROADMAP.md`.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
@@ -97,7 +97,10 @@ struct OracleArgs {
 struct VerifyArgs {
     #[command(flatten)]
     sources: Sources,
-    /// The manifests, 16 hex each.
+    /// Every file of each manifest, not only the WADs the history reads.
+    #[arg(long)]
+    all_files: bool,
+    /// The manifests, 16 hex each, in the order that names the first build and file using a chunk.
     #[arg(required = true)]
     manifests: Vec<String>,
 }
@@ -281,37 +284,51 @@ fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let archive = Archive::open(&args.sources)?;
     let source = archive.source();
     let mut seen = HashSet::new();
-    let mut chunks: Vec<(ChunkRef, u64)> = Vec::new();
+    // Each chunk with the first manifest and file that use it, the file's path interned: a path
+    // repeats in every build.
+    let mut chunks: Vec<(ChunkRef, u64, u32)> = Vec::new();
+    let mut paths: Vec<String> = Vec::new();
+    let mut path_index: HashMap<String, u32> = HashMap::new();
     for id in &args.manifests {
         let manifest = archive.manifest(hex_id(id)?)?;
-        for file in manifest.files.iter().filter(|f| f.path.ends_with(".wad.client")) {
-            chunks.extend(manifest.chunks_of(file)?.into_iter().filter(|c| seen.insert(c.id)).map(|c| (c, manifest.id)));
+        for file in manifest.files.iter().filter(|f| args.all_files || f.path.ends_with(".wad.client")) {
+            let fresh: Vec<ChunkRef> = manifest.chunks_of(file)?.into_iter().filter(|c| seen.insert(c.id)).collect();
+            if fresh.is_empty() {
+                continue;
+            }
+            let path = *path_index.entry(file.path.clone()).or_insert_with(|| {
+                paths.push(file.path.clone());
+                (paths.len() - 1) as u32
+            });
+            chunks.extend(fresh.into_iter().map(|c| (c, manifest.id, path)));
         }
     }
-    tracing::info!("{} chunks in the WADs of {} manifests", chunks.len(), args.manifests.len());
+    let what = if args.all_files { "files" } else { "WADs" };
+    tracing::info!("{} chunks in the {what} of {} manifests", chunks.len(), args.manifests.len());
     let started = Instant::now();
     let done = AtomicUsize::new(0);
-    let mut bad: Vec<(ChunkRef, u64, String)> = pool.install(|| {
+    let mut bad: Vec<(ChunkRef, u64, u32, String)> = pool.install(|| {
         chunks
             .par_iter()
             .map_init(
                 || zstd::bulk::Decompressor::new().expect("a zstd decompressor"),
-                |dec, (chunk, manifest)| {
+                |dec, (chunk, manifest, path)| {
                     let n = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if n.is_multiple_of(100_000) {
                         tracing::info!("{n} of {} chunks ({:.0}s)", chunks.len(), started.elapsed().as_secs_f64());
                     }
                     let checked = source.frames(std::slice::from_ref(chunk)).and_then(|frames| open_frame(chunk, &frames[0], dec));
-                    checked.err().map(|e| (*chunk, *manifest, e.to_string()))
+                    checked.err().map(|e| (*chunk, *manifest, *path, e.to_string()))
                 },
             )
             .flatten()
             .collect()
     });
-    bad.sort_by_key(|(chunk, _, _)| chunk.id);
-    for (chunk, manifest, problem) in &bad {
+    bad.sort_by_key(|(chunk, ..)| chunk.id);
+    for (chunk, manifest, path, problem) in &bad {
         let p = chunk.place;
-        println!("{:016x}\t{:016X}\t{}\t{}\t{}\t{manifest:016X}\t{problem}", chunk.id, p.bundle, p.offset, p.compressed_size, p.uncompressed_size);
+        let path = &paths[*path as usize];
+        println!("{:016x}\t{:016X}\t{}\t{}\t{}\t{manifest:016X}\t{path}\t{problem}", chunk.id, p.bundle, p.offset, p.compressed_size, p.uncompressed_size);
     }
     tracing::info!("{} of {} chunks bad ({:.0}s)", bad.len(), chunks.len(), started.elapsed().as_secs_f64());
     if !bad.is_empty() {
