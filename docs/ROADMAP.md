@@ -63,4 +63,3 @@ workspace then depends on.
   section, as in the history, and the append goes on; [OPERATIONS.md](OPERATIONS.md) has a run stop
   for a file a writer cannot parse in a way it has not seen before. Which failures count as new is
   open.
-- **License** of this repository.
