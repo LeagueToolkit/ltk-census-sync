@@ -23,8 +23,9 @@ undecoded). A local merged bundle as the first chunk source, so the
 oracle can run before the CDN source exists. Done ([RUNS.md](RUNS.md)).
 
 **3. `sync-history` and `append`.** The tip's index, the batched blob reader, the fast-import
-writer, `census-sync append`. Passes the oracle over 16.10-16.19 appended onto 16.9: 38 trees, all
-identical.
+writer, `census-sync append`. Passes the oracle over 16.10-16.19 appended onto 16.9. Done: 36 of
+38 trees and commits identical; the other two are where the published history was written from an
+archive's misplaced chunks, and `census-sync rebuild` writes the fix ([RUNS.md](RUNS.md)).
 
 **4. The CDN.** The CDN chunk source with multi-range requests, the chunk cache, recorded fixtures.
 Passes the oracle over one patch with the CDN as the only source.
@@ -56,7 +57,9 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
   `multipart/byteranges` reader. Proposed: `ureq`.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
-- **The chunk cache.** How much to keep, and whether to keep it at all once a build is pushed: the
+- **The chunk cache.** Whole bundles at their CDN paths, the mirror's form, which a run reads by the
+  manifest's layout and which can be served over HTTP as a mirror (proposed 2026-10-03); or chunks
+  by id, which a run fetches by range and which hold only what it read. And how much to keep: the
   next build shares most chunks with the last.
 - **The pause after large builds.** An append that rewrote several hundred thousand files was
   followed by one to two minutes of nothing before the next build started ([RUNS.md](RUNS.md)).
@@ -67,4 +70,8 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
 - **`main`'s README** says the history is kept up by `census append`. `main` is in no `history`
   tree, so a new README is a child commit on `main`, with no effect on the oracle; it goes with
   census-sync's first push.
+- **Which parse failures stop a run.** An entry whose bytes do not parse for their kind gets no
+  section, as in the history, and the append goes on; [OPERATIONS.md](OPERATIONS.md) has a run stop
+  for a file a writer cannot parse in a way it has not seen before. Which failures count as new is
+  open.
 - **License** of this repository.

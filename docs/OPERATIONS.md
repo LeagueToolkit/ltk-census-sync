@@ -1,8 +1,8 @@
 # Operations
 
 Running census-sync: the clone it works in, what a run does end to end, where it runs, and what
-happens when something fails. The commands are planned ([ROADMAP.md](ROADMAP.md)); this states how
-they are meant to behave.
+happens when something fails. `append` and `oracle` are written; the other commands are planned
+([ROADMAP.md](ROADMAP.md)), and this states how they are meant to behave.
 
 ## The working clone
 
@@ -21,11 +21,17 @@ cannot fast-forward to.
 | command | does |
 | --- | --- |
 | `census-sync status` | the tip, and the live builds the history lacks |
-| `census-sync append <manifest>...` | append those builds to the local `history`; no push |
+| `census-sync append <manifest>` | append one build to the local `history`, its version, date and realms given; no push |
 | `census-sync check` | the checks of [APPEND.md](APPEND.md), "Before a push", on commits not yet pushed |
 | `census-sync push` | push `history`, its tags and notes to the configured remote |
 | `census-sync run` | fetch, status, append every new build in arrival order, check, push |
-| `census-sync oracle <commit> <count>` | re-append `count` builds after `commit` and compare their trees with the published ones |
+| `census-sync oracle <commit> <count>` | re-append `count` builds after `commit` on a branch of its own, and compare each tree and commit with the published one |
+| `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in |
+| `census-sync rebuild <commit> <count>` | re-append `count` builds after `commit` in a row on a branch of its own, from their bytes and their published facts, and list where each tag of the range would move; the history as its bytes write it, for a fix of the published history |
+
+Until the CDN source exists, the commands read chunks from an archive of past builds
+(`--archive`): its manifests, `game-win/<MANIFEST ID>.manifest`, and its merged bundle, behind a
+mirror of whole bundles when one is given (`--mirror`).
 
 ## A scheduled run
 
@@ -51,7 +57,7 @@ A push is `history` (fast-forward only, never forced), then the new tags, then
 
 ## When something fails
 
-The run stops and exits non-zero, `history` is reset to the tip it started from, and nothing is
+The run stops and exits non-zero, `history` stays at the tip it started from, and nothing is
 pushed. Causes it stops for:
 
 - a file the build ships that a writer cannot parse in a way it has not seen before;
@@ -67,6 +73,7 @@ and running again is the whole recovery.
 ```
 data/history.git   the working clone
 data/chunks/       the chunk cache, by chunk id
+data/cdn/          whole bundles at their CDN paths, a mirror
 data/logs/         one log per run
 ```
 

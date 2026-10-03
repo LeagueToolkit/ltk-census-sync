@@ -1,7 +1,342 @@
 //! `census-sync`: finds the live builds the history lacks, appends each as a commit, checks the
-//! result and pushes it (`docs/OPERATIONS.md`). The commands are planned in `docs/ROADMAP.md`.
+//! result and pushes it (`docs/OPERATIONS.md`). The commands not written yet are planned in
+//! `docs/ROADMAP.md`.
 
-fn main() {
-    eprintln!("census-sync: no commands yet; docs/ROADMAP.md has the plan");
-    std::process::exit(2);
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
+
+use anyhow::{bail, Context, Result};
+use camino::Utf8PathBuf;
+use clap::{Args, Parser, Subcommand};
+use rayon::prelude::*;
+use sync_format::{legacy_bins, BuildFacts};
+use sync_history::{append, build_facts, Appended, Git};
+use sync_source::{open_frame, BundleMirror, ChunkRef, ChunkSource, Layers, Manifest, MergedBundle};
+
+#[derive(Parser)]
+#[command(about = "Append new live builds of League of Legends to the census history", version)]
+struct Cli {
+    /// Worker threads for the WADs of a build; the machine's parallelism by default.
+    #[arg(long, global = true)]
+    jobs: Option<usize>,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Append one build to the local history; no push.
+    Append(AppendArgs),
+    /// Re-append builds of the history, each onto its published parent, and compare each tree and
+    /// commit with the published one.
+    Oracle(OracleArgs),
+    /// Check every chunk the WADs of some manifests use: its bytes decompress to its size and hash
+    /// to its id. Prints each bad chunk with the bundle its manifest places it in.
+    Verify(VerifyArgs),
+    /// Re-append builds of the history in a row onto a branch of their own, from their bytes and
+    /// their published facts: the history as those bytes write it. Prints where a tree differs
+    /// from the published one, and where each tag of the range would move.
+    Rebuild(OracleArgs),
+}
+
+#[derive(Args)]
+struct Sources {
+    /// An archive of past builds: `game-win/<MANIFEST ID>.manifest` and the merged bundle
+    /// `lol.bundle`.
+    #[arg(long, env = "CENSUS_SYNC_ARCHIVE")]
+    archive: Utf8PathBuf,
+    /// Whole bundles at their CDN paths under this directory, read before the archive.
+    #[arg(long, env = "CENSUS_SYNC_MIRROR")]
+    mirror: Option<Utf8PathBuf>,
+}
+
+#[derive(Args)]
+struct AppendArgs {
+    /// The working clone of the history, a bare repository.
+    #[arg(long)]
+    repo: Utf8PathBuf,
+    #[command(flatten)]
+    sources: Sources,
+    /// The branch to append to.
+    #[arg(long, default_value = "history")]
+    branch: String,
+    /// Set the branch to this commit first.
+    #[arg(long)]
+    start: Option<String>,
+    /// The client's version, `16.19.8207193`.
+    #[arg(long)]
+    version: String,
+    /// The day the manifest was published, `YYYY-MM-DD`.
+    #[arg(long)]
+    date: String,
+    /// The live realms that shipped the build.
+    #[arg(long = "realm", required = true, value_delimiter = ',')]
+    realms: Vec<String>,
+    /// The build's manifest id, 16 hex.
+    manifest: String,
+}
+
+#[derive(Args)]
+struct OracleArgs {
+    /// The working clone of the history, a bare repository.
+    #[arg(long)]
+    repo: Utf8PathBuf,
+    #[command(flatten)]
+    sources: Sources,
+    /// The branch the builds are re-appended on.
+    #[arg(long, default_value = "oracle")]
+    branch: String,
+    /// The published commit the range starts after.
+    commit: String,
+    /// How many of the builds after it on `history` to re-append.
+    count: usize,
+}
+
+#[derive(Args)]
+struct VerifyArgs {
+    #[command(flatten)]
+    sources: Sources,
+    /// The manifests, 16 hex each.
+    #[arg(required = true)]
+    manifests: Vec<String>,
+}
+
+/// The chunk sources of a run: the archive's merged bundle, behind a mirror when one is given.
+struct Archive {
+    root: Utf8PathBuf,
+    bundle: MergedBundle,
+    mirror: Option<BundleMirror>,
+}
+
+impl Archive {
+    fn open(sources: &Sources) -> Result<Self> {
+        let started = Instant::now();
+        let bundle = MergedBundle::open(&sources.archive.join("lol.bundle")).context("opening the merged bundle")?;
+        tracing::info!("{} chunks in the merged bundle ({:.1}s)", bundle.len(), started.elapsed().as_secs_f64());
+        Ok(Self { root: sources.archive.clone(), bundle, mirror: sources.mirror.as_deref().map(BundleMirror::new) })
+    }
+
+    fn manifest(&self, id: u64) -> Result<Manifest> {
+        let path = self.root.join("game-win").join(format!("{id:016X}.manifest"));
+        Ok(Manifest::read(&path)?)
+    }
+
+    fn source(&self) -> Layers<'_> {
+        let mut layers: Vec<&dyn ChunkSource> = Vec::new();
+        if let Some(mirror) = &self.mirror {
+            layers.push(mirror);
+        }
+        layers.push(&self.bundle);
+        Layers::new(layers)
+    }
+}
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_writer(std::io::stderr)
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
+        .init();
+    let cli = Cli::parse();
+    let jobs = cli.jobs.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(jobs).build()?;
+    match cli.command {
+        Command::Append(args) => run_append(&args, &pool),
+        Command::Oracle(args) => run_oracle(&args, &pool),
+        Command::Verify(args) => run_verify(&args, &pool),
+        Command::Rebuild(args) => run_rebuild(&args, &pool),
+    }
+}
+
+fn hex_id(text: &str) -> Result<u64> {
+    u64::from_str_radix(text, 16).with_context(|| format!("{text}: a manifest id is 16 hex"))
+}
+
+fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let git = Git::open(&args.repo)?;
+    if let Some(start) = &args.start {
+        let commit = git.rev_parse(&format!("{start}^{{commit}}"))?;
+        git.reset_ref(&format!("refs/heads/{}", args.branch), &commit)?;
+    }
+    let mut parts = args.version.split('.').map(str::parse::<u16>);
+    let (Some(Ok(season)), Some(Ok(patch))) = (parts.next(), parts.next()) else {
+        bail!("{}: a version is season.patch.build", args.version);
+    };
+    let manifest = hex_id(&args.manifest)?;
+    let facts = BuildFacts {
+        version: args.version.clone(),
+        patch: format!("{season}.{patch}"),
+        manifest,
+        rads: None,
+        date: args.date.clone(),
+        legacy_bins: legacy_bins(season, patch),
+        realms: args.realms.clone(),
+    };
+    let archive = Archive::open(&args.sources)?;
+    let started = Instant::now();
+    let appended = append(&git, &args.branch, &facts, &archive.manifest(manifest)?, &archive.source(), pool)?;
+    log(&facts, &appended, started);
+    Ok(())
+}
+
+/// The commit `commit` names, and the `count` builds after it on `history`.
+fn published_after(git: &Git, commit: &str, count: usize) -> Result<(String, Vec<String>)> {
+    let base = git.rev_parse(&format!("{commit}^{{commit}}"))?;
+    let range = format!("{base}..history");
+    let published: Vec<String> =
+        git.run(&["rev-list", "--reverse", "--first-parent", "--ancestry-path", &range])?.lines().take(count).map(str::to_string).collect();
+    if published.len() < count {
+        bail!("history has {} builds after {commit}, not {count}", published.len());
+    }
+    Ok((base, published))
+}
+
+fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let git = Git::open(&args.repo)?;
+    let (_, published) = published_after(&git, &args.commit, args.count)?;
+    let archive = Archive::open(&args.sources)?;
+    let source = archive.source();
+    let branch = format!("refs/heads/{}", args.branch);
+    let started = Instant::now();
+    let (mut trees, mut commits, mut failed) = (0, 0, Vec::new());
+    for (i, expected) in published.iter().enumerate() {
+        let build = Instant::now();
+        let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
+        // Onto the published parent, so one build that differs does not hide the ones after it.
+        git.reset_ref(&branch, &git.rev_parse(&format!("{expected}^"))?)?;
+        let appended = match archive.manifest(facts.manifest).and_then(|m| Ok(append(&git, &args.branch, &facts, &m, &source, pool)?)) {
+            Ok(appended) => appended,
+            Err(e) => {
+                tracing::error!("{}/{} {}: stopped: {e:#}", i + 1, published.len(), facts.version);
+                failed.push(facts.version);
+                continue;
+            }
+        };
+        log(&facts, &appended, build);
+        let tree = git.rev_parse(&format!("{expected}^{{tree}}"))?;
+        if appended.tree != tree {
+            let diff = git.run(&["diff-tree", "-r", "--name-status", expected, &appended.commit])?;
+            let lines: Vec<&str> = diff.lines().collect();
+            tracing::error!("{}/{} {}: DIFF, {} paths:\n{}", i + 1, published.len(), facts.version, lines.len(), lines[..lines.len().min(20)].join("\n"));
+            failed.push(facts.version);
+            continue;
+        }
+        trees += 1;
+        let same = appended.commit == *expected;
+        commits += usize::from(same);
+        tracing::info!("{}/{} {}: same tree, {} commit", i + 1, published.len(), facts.version, if same { "same" } else { "another" });
+    }
+    let seconds = started.elapsed().as_secs_f64();
+    tracing::info!(
+        "{trees} of {} trees identical, {commits} commits identical, {seconds:.0}s ({:.1}s a build)",
+        published.len(),
+        seconds / published.len() as f64
+    );
+    if !failed.is_empty() || commits != published.len() {
+        bail!("{} builds differ or stopped: {}", published.len() - commits, failed.join(" "));
+    }
+    Ok(())
+}
+
+fn run_rebuild(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let git = Git::open(&args.repo)?;
+    let (base, published) = published_after(&git, &args.commit, args.count)?;
+    let archive = Archive::open(&args.sources)?;
+    let source = archive.source();
+    git.reset_ref(&format!("refs/heads/{}", args.branch), &base)?;
+    let started = Instant::now();
+    let mut rebuilt = Vec::with_capacity(published.len());
+    for (i, expected) in published.iter().enumerate() {
+        let build = Instant::now();
+        let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
+        let appended = append(&git, &args.branch, &facts, &archive.manifest(facts.manifest)?, &source, pool)?;
+        log(&facts, &appended, build);
+        let differs = git.run(&["diff-tree", "-r", "--name-only", expected, &appended.commit])?.lines().count();
+        match differs {
+            0 if appended.commit == *expected => tracing::info!("{}/{} {}: the published commit", i + 1, published.len(), facts.version),
+            0 => tracing::info!("{}/{} {}: the published tree, another commit", i + 1, published.len(), facts.version),
+            n => tracing::warn!("{}/{} {}: {n} paths differ from the published tree", i + 1, published.len(), facts.version),
+        }
+        rebuilt.push(appended.commit);
+    }
+    let tags = git.run(&["for-each-ref", "--format=%(refname:short) %(objectname)", "refs/tags"])?;
+    for (tag, commit) in tags.lines().filter_map(|l| l.split_once(' ')) {
+        if let Some(i) = published.iter().position(|p| p == commit) {
+            let moves = if rebuilt[i] == *commit { "stays" } else { "moves" };
+            println!("{tag}	{commit}	{}	{moves}", rebuilt[i]);
+        }
+    }
+    let changed = published.iter().zip(&rebuilt).filter(|(p, r)| p != r).count();
+    tracing::info!(
+        "{} builds rebuilt on {}, {changed} commits new, {:.0}s",
+        published.len(),
+        args.branch,
+        started.elapsed().as_secs_f64()
+    );
+    Ok(())
+}
+
+fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
+    let archive = Archive::open(&args.sources)?;
+    let source = archive.source();
+    let mut seen = HashSet::new();
+    let mut chunks: Vec<(ChunkRef, u64)> = Vec::new();
+    for id in &args.manifests {
+        let manifest = archive.manifest(hex_id(id)?)?;
+        for file in manifest.files.iter().filter(|f| f.path.ends_with(".wad.client")) {
+            chunks.extend(manifest.chunks_of(file)?.into_iter().filter(|c| seen.insert(c.id)).map(|c| (c, manifest.id)));
+        }
+    }
+    tracing::info!("{} chunks in the WADs of {} manifests", chunks.len(), args.manifests.len());
+    let started = Instant::now();
+    let done = AtomicUsize::new(0);
+    let mut bad: Vec<(ChunkRef, u64, String)> = pool.install(|| {
+        chunks
+            .par_iter()
+            .map_init(
+                || zstd::bulk::Decompressor::new().expect("a zstd decompressor"),
+                |dec, (chunk, manifest)| {
+                    let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    if n.is_multiple_of(100_000) {
+                        tracing::info!("{n} of {} chunks ({:.0}s)", chunks.len(), started.elapsed().as_secs_f64());
+                    }
+                    let checked = source.frames(std::slice::from_ref(chunk)).and_then(|frames| open_frame(chunk, &frames[0], dec));
+                    checked.err().map(|e| (*chunk, *manifest, e.to_string()))
+                },
+            )
+            .flatten()
+            .collect()
+    });
+    bad.sort_by_key(|(chunk, _, _)| chunk.id);
+    for (chunk, manifest, problem) in &bad {
+        let p = chunk.place;
+        println!("{:016x}\t{:016X}\t{}\t{}\t{}\t{manifest:016X}\t{problem}", chunk.id, p.bundle, p.offset, p.compressed_size, p.uncompressed_size);
+    }
+    tracing::info!("{} of {} chunks bad ({:.0}s)", bad.len(), chunks.len(), started.elapsed().as_secs_f64());
+    if !bad.is_empty() {
+        bail!("{} chunks do not verify", bad.len());
+    }
+    Ok(())
+}
+
+fn log(facts: &BuildFacts, a: &Appended, started: Instant) {
+    tracing::info!(
+        "{} {:016x}: {} of {} WADs changed, {} entries read, {} files written, {} removed{} -> commit {} tree {} ({:.1}s)",
+        facts.version,
+        facts.manifest,
+        a.changed,
+        a.wads,
+        a.read,
+        a.written,
+        a.removed,
+        if a.unrenderable + a.repeated > 0 {
+            format!(" ({} bin objects unrenderable, {} under a repeated entry hash)", a.unrenderable, a.repeated)
+        } else {
+            String::new()
+        },
+        &a.commit[..12],
+        &a.tree[..12],
+        started.elapsed().as_secs_f64()
+    );
 }

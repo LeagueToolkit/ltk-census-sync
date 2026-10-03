@@ -92,9 +92,13 @@ and `cargo test --workspace --locked`.
 
 The history is its own test. For a range of published builds:
 
-1. clone or reuse the working clone, and start a branch at the commit before the range;
-2. append the range's builds from their bytes, from the cache or the CDN;
-3. compare each appended commit's tree id with the published commit's.
+1. clone or reuse the working clone;
+2. for each build of the range, set a branch to its published parent and append the build from its
+   bytes, from the cache, a mirror, an archive or the CDN;
+3. compare the appended commit's tree and commit id with the published commit's.
+
+Each build goes onto its published parent, so one build that differs does not hide the ones after
+it; while every commit is identical, that is the same as appending the range in a row.
 
 Every tree must match. A writer change, a dependency move, a new parser: each passes the oracle
 over at least one patch before it lands, and over a range that crosses a WAD format or chunk-hash

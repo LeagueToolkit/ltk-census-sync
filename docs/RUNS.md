@@ -87,3 +87,46 @@ its manifest and the merged bundle (`sync-source/tests/archive.rs`).
   16.19. 7 s a build at 9.2, 26 s at 16.19, in a debug build.
 - **Chunk hashes.** Every manifest checked uses one chunking version: 3 (RITO_HKDF) from 9.2 to the
   last build of 16.3, 4 (BLAKE3) from 16.4.7461248, the first build of 16.4. None uses 1 or 2.
+
+## The archive's misplaced chunks (2026-10-03)
+
+`census-sync verify` over the WADs of the archive's manifests, then each bad chunk against Riot's
+bundle for it.
+
+- **16.10 to 16.19** (38 manifests): 10 of 741,397 chunks do not verify. **16.4 to 16.9** (32
+  manifests): 5 of 610,672, not compared with Riot's bytes.
+- **What the 10 hold.** Each bad id is the BLAKE3 of Riot's bytes for it: the manifests are right.
+  The archive holds the frame of another chunk of the same bundle instead, 1 to 57 rows away, of the
+  same uncompressed and compressed size, and holds that chunk under its own id as well; three bad
+  ids hold one chunk's frame, two another's. No two hashes collided: of the 5,056 chunks of the six
+  bundles, hashed under all four schemes, none gives a bad id or the id of the bytes held for it,
+  whole or in either 32-bit half, but each chunk's own BLAKE3. A chunk was taken for a neighbour of
+  its size, and a check of ids under RITO_HKDF alone, which every BLAKE3 id fails, would not see it.
+- **Riot's bundles.** The 6 bundles holding the 10, whole from the CDN over https: 122 MB, 5,056
+  chunks. With them in front of the archive, every chunk of the WADs of 16.15.7983109 and
+  16.16.8032921 verifies (628,096).
+
+## The oracle over 16.10 to 16.19 (2026-10-03)
+
+- **In a row, from the archive alone.** 23 builds reproduced, trees and commit ids, then it stopped
+  at 16.15.7983109 on the first chunk that did not verify. 34.7 s for 16.10.7742490 (347 WADs
+  changed, 324,576 files written) with nothing cached.
+- **Each build onto its published parent, the bundles in front.** 36 of 38 trees and commits
+  identical, 9.3 s a build with the archive in the OS's cache. The two that differ are
+  16.15.7983109 (3 paths) and 16.16.8032921 (50).
+- **Found.** Those paths are 13 entries in 11 WADs whose published files were written from the
+  misplaced chunks' bytes: `teemo` `956cbfd0d84d4c06` at 16.15.7983109; at 16.16.8032921, `jhin`
+  `08fa46a4225477c5`, `17e6f7c39b188c03` and `f7b45a49df96babb`, `jinx` and `ruby_jinx`
+  `aa9e292bc27e32e0` and `d4c60efa52e9b40b`, `milio` `1f21fbf687da55b8`, `nami`
+  `56a3695d9c2dbcfc`, `riven` `525edc9d3d07c6f7`, `taliyah` and `map11` `fe4f2aa2c99643d9`. Riot's
+  bytes hold other objects. The published files carry over into the commits after, until each entry
+  changes.
+
+## The fix of 16.10 to 16.19 (2026-10-03)
+
+- **What.** `census-sync rebuild 16.9 38` onto a branch of its own, the six bundles in front of the
+  archive: 354 s.
+- **Result.** The 23 builds to 16.14.7949266 are the published commits. From 16.15.7983109 on, 15
+  commits are new; each differs from the published one in the misplaced chunks' entries while the
+  published files of them are wrong: 3 paths through 16.15, 50 at 16.16, 3 from 16.17. At 16.19 one
+  entry remains, `nami` `56a3695d9c2dbcfc`. The tags 16.15 to 16.19 move.
