@@ -15,7 +15,7 @@ fn text(len: usize) -> Vec<u8> {
 fn a_file_reads_across_its_chunks_and_seeks_anywhere() {
     let bytes = text(1000);
     let (source, chunks) = file_of(&bytes, 64);
-    let mut file = FileReader::new(&source, chunks).unwrap();
+    let mut file = FileReader::new(&source, chunks);
     assert_eq!(file.size(), 1000);
     assert_eq!(file.read_range(60, 200).unwrap(), &bytes[60..260]);
     assert_eq!(file.read_range(0, 1000).unwrap(), bytes);
@@ -40,12 +40,12 @@ fn a_chunk_that_does_not_hash_to_its_id_is_refused() {
     let (mut source, chunks) = file_of(&bytes, 100);
     let other = chunks_of(&[b'z'; 100], 100).remove(0).1;
     source.frames.insert(chunks[1].id, other);
-    let mut file = FileReader::new(&source, chunks.clone()).unwrap();
+    let mut file = FileReader::new(&source, chunks.clone());
     assert_eq!(file.read_range(0, 100).unwrap(), &bytes[..100]);
     assert!(matches!(file.read_range(50, 100), Err(Error::BadChunk { id, .. }) if id == chunks[1].id));
 
     source.frames.remove(&chunks[0].id);
-    let mut file = FileReader::new(&source, chunks.clone()).unwrap();
+    let mut file = FileReader::new(&source, chunks.clone());
     assert!(matches!(file.read_range(0, 1), Err(Error::MissingChunk(id)) if id == chunks[0].id));
 }
 
@@ -64,27 +64,35 @@ fn a_chunk_is_checked_only_under_the_hash_its_file_lists() {
 }
 
 #[test]
-fn a_merged_bundle_reads_its_parts_by_their_own_tables() {
+fn a_merged_bundle_reads_each_copy_of_an_id_of_the_right_size_until_one_checks() {
     let dir = tempfile::tempdir().unwrap();
     let dir = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
     let bytes = text(300);
     let chunks = chunks_of(&bytes, 100);
     let [(a, fa), (b, fb), (c, fc)] = [chunks[0].clone(), chunks[1].clone(), chunks[2].clone()];
     let size = |r: &sync_source::ChunkRef| r.place.uncompressed_size;
-    write_part(&dir.join("t.bundle"), &[(a.id, size(&a), &fa), (b.id, size(&b), &fb)]);
-    // The second part holds c, and a again under a frame of other bytes: the first part's wins.
-    let wrong = zstd::bulk::compress(b"not a", 1).unwrap();
-    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc), (a.id, 5, &wrong)]);
+    // The first part holds b's frame under a's id, at a's size; the second holds a under its id at
+    // another size, then a's own frame.
+    let short = zstd::bulk::compress(b"not a", 1).unwrap();
+    write_part(&dir.join("t.bundle"), &[(a.id, size(&a), &fb), (b.id, size(&b), &fb)]);
+    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc), (a.id, 5, &short), (a.id, size(&a), &fa)]);
 
     let bundle = MergedBundle::open(&dir.join("t.bundle")).unwrap();
-    assert_eq!(bundle.len(), 3);
-    assert_eq!(bundle.frames(&[c, a]).unwrap(), [fc, fa]);
-    let mut file = FileReader::new(&bundle, vec![a, b, c]).unwrap();
+    assert_eq!(bundle.len(), 5);
+    assert_eq!(bundle.chunks(&[c, a]).unwrap(), [&bytes[200..], &bytes[..100]]);
+    let mut file = FileReader::new(&bundle, vec![a, b, c]);
     assert_eq!(file.read_range(0, 300).unwrap(), bytes);
 
     let mut missing = a;
     missing.id ^= 1;
-    assert!(matches!(bundle.frames(&[missing]), Err(Error::MissingChunk(_))));
+    assert!(matches!(bundle.chunks(&[missing]), Err(Error::MissingChunk(_))));
+    // A size no copy has is a chunk the bundle lacks; copies that do not check are a bad chunk.
+    let mut other = b;
+    other.place.uncompressed_size += 1;
+    assert!(matches!(bundle.chunks(&[other]), Err(Error::MissingChunk(_))));
+    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc)]);
+    let bundle = MergedBundle::open(&dir.join("t.bundle")).unwrap();
+    assert!(matches!(bundle.chunks(&[a]), Err(Error::BadChunk { .. })));
 }
 
 #[test]
@@ -141,9 +149,9 @@ fn a_mirror_reads_by_the_manifests_places_and_layers_fall_through() {
     fs_err::write(&path, &bundle).unwrap();
 
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
-    assert!(matches!(mirror.frames(&refs[2..]), Err(Error::MissingChunk(_))));
+    assert!(matches!(mirror.chunks(&refs[2..]), Err(Error::MissingChunk(_))));
     let (memory, _) = file_of(&bytes, 100);
     let layers = Layers::new(vec![&mirror, &memory]);
-    let mut file = FileReader::new(&layers, refs).unwrap();
+    let mut file = FileReader::new(&layers, refs);
     assert_eq!(file.read_range(0, 300).unwrap(), bytes);
 }

@@ -51,10 +51,8 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
 - **Realm notes.** What a note in `refs/notes/realms` holds when a realm adopts a build after it was
   appended: proposed, the full sorted realm list as of the note, one line, so the newest note is
   the answer.
-- **The HTTP client** for manifests and multi-range bundle requests. `ureq` is blocking with no
-  async runtime, which suits a tool whose parallelism is rayon's; `reqwest` with `blocking` is what
-  ltk-manager uses, at the cost of a tokio runtime inside. Either needs a hand-written
-  `multipart/byteranges` reader. Proposed: `ureq`.
+- **Multi-range requests.** `ureq` (the HTTP client, [TOOLING.md](TOOLING.md)) has no
+  `multipart/byteranges` reader; the CDN source's range requests need one written here.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
 - **The chunk cache.** Whole bundles at their CDN paths, the mirror's form, which a run reads by the

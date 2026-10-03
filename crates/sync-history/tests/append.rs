@@ -8,7 +8,7 @@ use camino::Utf8PathBuf;
 use ltk_wad::{WadChunk, WadChunkCompression, WadHash};
 use sync_format::{build_yaml, commit_message, entry_files, wad_yaml, BuildFacts};
 use sync_history::{append, Error, Git};
-use sync_source::{BundleChunk, ChunkHash, ChunkRef, ChunkSource, ChunkingParams, Manifest, ManifestFile};
+use sync_source::{open_frame, BundleChunk, ChunkHash, ChunkRef, ChunkSource, ChunkingParams, Manifest, ManifestFile};
 
 const KEPT: u64 = 0x1111_1111_1111_1111;
 const REREAD: u64 = 0x2222_2222_2222_2222;
@@ -20,8 +20,9 @@ const NEW: u64 = 0x4444_4444_4444_4444;
 struct Frames(HashMap<u64, Vec<u8>>);
 
 impl ChunkSource for Frames {
-    fn frames(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, sync_source::Error> {
-        wanted.iter().map(|c| self.0.get(&c.id).cloned().ok_or(sync_source::Error::MissingChunk(c.id))).collect()
+    fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, sync_source::Error> {
+        let mut dec = zstd::bulk::Decompressor::new()?;
+        wanted.iter().map(|c| open_frame(c, self.0.get(&c.id).ok_or(sync_source::Error::MissingChunk(c.id))?, &mut dec)).collect()
     }
 }
 

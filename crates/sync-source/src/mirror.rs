@@ -5,7 +5,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::bundle::read_exact_at;
-use crate::chunk::ChunkSource;
+use crate::chunk::{open, ChunkSource};
 use crate::rman::ChunkRef;
 use crate::Error;
 
@@ -20,14 +20,19 @@ impl BundleMirror {
         Self { root: root.to_path_buf() }
     }
 
-    /// Where a bundle is kept, the CDN's path for it under the root.
+    /// Where a bundle is kept: the CDN's path for it, under the root.
     pub fn bundle_path(&self, bundle: u64) -> Utf8PathBuf {
-        self.root.join(format!("channels/public/bundles/{bundle:016X}.bundle"))
+        self.root.join(bundle_url_path(bundle))
     }
 }
 
+/// A bundle's path on the CDN, under its host.
+pub(crate) fn bundle_url_path(bundle: u64) -> String {
+    format!("channels/public/bundles/{bundle:016X}.bundle")
+}
+
 impl ChunkSource for BundleMirror {
-    fn frames(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
+    fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
         wanted
             .iter()
             .map(|chunk| {
@@ -37,13 +42,15 @@ impl ChunkSource for BundleMirror {
                 }
                 let mut frame = vec![0u8; chunk.place.compressed_size as usize];
                 read_exact_at(&fs_err::File::open(&path)?, chunk.place.offset, &mut frame)?;
-                Ok(frame)
+                open(chunk, &frame)
             })
             .collect()
     }
 }
 
-/// Sources in order: each chunk from the first that holds it.
+/// Sources in order: each chunk from the first that holds it with bytes that check. A source that
+/// lacks a chunk, or holds bytes for it that do not check, passes it to the next; when none has it,
+/// the first source's error is the one returned.
 pub struct Layers<'a> {
     layers: Vec<&'a dyn ChunkSource>,
 }
@@ -56,18 +63,21 @@ impl<'a> Layers<'a> {
 }
 
 impl ChunkSource for Layers<'_> {
-    fn frames(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
+    fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
         wanted
             .iter()
             .map(|chunk| {
+                let mut first = None;
                 for layer in &self.layers {
-                    match layer.frames(std::slice::from_ref(chunk)) {
-                        Ok(mut frames) => return Ok(frames.remove(0)),
-                        Err(Error::MissingChunk(_)) => continue,
+                    match layer.chunks(std::slice::from_ref(chunk)) {
+                        Ok(mut data) => return Ok(data.remove(0)),
+                        Err(e @ (Error::MissingChunk(_) | Error::BadChunk { .. })) => {
+                            first.get_or_insert(e);
+                        }
                         Err(e) => return Err(e),
                     }
                 }
-                Err(Error::MissingChunk(chunk.id))
+                Err(first.unwrap_or(Error::MissingChunk(chunk.id)))
             })
             .collect()
     }

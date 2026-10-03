@@ -102,7 +102,7 @@ fn every_wad_of_the_build_has_its_published_wad_yaml() {
     let mut failed = 0;
     for ((file, path), published) in wads.iter().zip(&paths).zip(&texts) {
         let chunks = build.manifest.chunks_of(file).expect("the file's chunks");
-        let mut reader = FileReader::new(&build.bundle, chunks).expect("a reader");
+        let mut reader = FileReader::new(&build.bundle, chunks);
         let (header, _) = read_wad_table(&mut reader).unwrap_or_else(|e| panic!("{}: {e}", file.path));
         let rendered = wad_yaml(header.major, header.minor, file.id, file.tags.iter().map(String::as_str));
         if &rendered != published {
@@ -126,7 +126,7 @@ fn every_entry_of_some_wads_reads_and_renders_as_published() {
     for path in WADS {
         let file = build.manifest.files.iter().find(|f| f.path == path).unwrap_or_else(|| panic!("{path} is not in the manifest"));
         let dir = wad_dir(path);
-        let mut reader = FileReader::new(&build.bundle, build.manifest.chunks_of(file).expect("chunks")).expect("a reader");
+        let mut reader = FileReader::new(&build.bundle, build.manifest.chunks_of(file).expect("chunks"));
         let (_, table) = read_wad_table(&mut reader).expect("the table");
         // A path hash the table lists twice takes its first entry's bytes and its last checksum.
         let mut first: Vec<_> = Vec::new();

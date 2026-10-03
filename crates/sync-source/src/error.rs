@@ -19,6 +19,9 @@ pub enum Error {
     /// A range outside its file.
     #[error("{offset}+{len} runs past the end of a file of {size} bytes")]
     Range { offset: u64, len: u64, size: u64 },
+    /// A download from the CDN that failed, or brought back something else.
+    #[error("{url}: {message}")]
+    Download { url: String, message: String },
     /// A WAD whose header or table does not have the shape of one.
     #[error("WAD: {0}")]
     Wad(String),

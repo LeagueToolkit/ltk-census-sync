@@ -214,7 +214,7 @@ fn read_wad<'a>(
     legacy: bool,
 ) -> Result<ReadWad<'a>, Error> {
     let wad_error = |source: sync_source::Error| Error::Wad { path: file.path.clone(), source };
-    let mut reader = FileReader::new(source, manifest.chunks_of(file).map_err(wad_error)?).map_err(wad_error)?;
+    let mut reader = FileReader::new(source, manifest.chunks_of(file).map_err(wad_error)?);
     let (header, table) = read_wad_table(&mut reader).map_err(wad_error)?;
     // A path hash the table lists twice takes its first entry's bytes and its last entry's
     // checksum, as the export that wrote the history stored it.

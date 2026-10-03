@@ -6,6 +6,7 @@
 //! whole: nothing here knows about the history.
 
 mod bundle;
+mod cdn;
 mod chunk;
 mod chunk_hash;
 mod error;
@@ -15,6 +16,7 @@ mod rman;
 mod wad;
 
 pub use bundle::MergedBundle;
+pub use cdn::{Cdn, BUNDLE_HOST};
 pub use chunk::{open_frame, ChunkSource};
 pub use chunk_hash::ChunkHash;
 pub use error::Error;

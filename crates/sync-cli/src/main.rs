@@ -12,7 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
 use sync_history::{append, build_facts, Appended, Git};
-use sync_source::{open_frame, BundleMirror, ChunkRef, ChunkSource, Layers, Manifest, MergedBundle};
+use sync_source::{BundleMirror, Cdn, ChunkRef, ChunkSource, Layers, Manifest, MergedBundle};
 
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
@@ -49,6 +49,13 @@ struct Sources {
     /// Whole bundles at their CDN paths under this directory, read before the archive.
     #[arg(long, env = "CENSUS_SYNC_MIRROR")]
     mirror: Option<Utf8PathBuf>,
+    /// For a chunk the mirror and the archive lack or hold wrong, download its whole bundle from
+    /// the CDN into the mirror.
+    #[arg(long, requires = "mirror")]
+    cdn: bool,
+    /// The CDN's host: Riot's, or a mirror served over HTTP.
+    #[arg(long, default_value = sync_source::BUNDLE_HOST)]
+    cdn_host: String,
 }
 
 #[derive(Args)]
@@ -105,11 +112,13 @@ struct VerifyArgs {
     manifests: Vec<String>,
 }
 
-/// The chunk sources of a run: the archive's merged bundle, behind a mirror when one is given.
+/// The chunk sources of a run, asked in order: a mirror when one is given, the archive's merged
+/// bundle, and the CDN filling the mirror when asked for.
 struct Archive {
     root: Utf8PathBuf,
     bundle: MergedBundle,
     mirror: Option<BundleMirror>,
+    cdn: Option<Cdn>,
 }
 
 impl Archive {
@@ -117,7 +126,9 @@ impl Archive {
         let started = Instant::now();
         let bundle = MergedBundle::open(&sources.archive.join("lol.bundle")).context("opening the merged bundle")?;
         tracing::info!("{} chunks in the merged bundle ({:.1}s)", bundle.len(), started.elapsed().as_secs_f64());
-        Ok(Self { root: sources.archive.clone(), bundle, mirror: sources.mirror.as_deref().map(BundleMirror::new) })
+        let mirror = sources.mirror.as_deref().map(BundleMirror::new);
+        let cdn = sources.mirror.as_deref().filter(|_| sources.cdn).map(|root| Cdn::new(&sources.cdn_host, root));
+        Ok(Self { root: sources.archive.clone(), bundle, mirror, cdn })
     }
 
     fn manifest(&self, id: u64) -> Result<Manifest> {
@@ -131,6 +142,9 @@ impl Archive {
             layers.push(mirror);
         }
         layers.push(&self.bundle);
+        if let Some(cdn) = &self.cdn {
+            layers.push(cdn);
+        }
         Layers::new(layers)
     }
 }
@@ -310,18 +324,14 @@ fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let mut bad: Vec<(ChunkRef, u64, u32, String)> = pool.install(|| {
         chunks
             .par_iter()
-            .map_init(
-                || zstd::bulk::Decompressor::new().expect("a zstd decompressor"),
-                |dec, (chunk, manifest, path)| {
-                    let n = done.fetch_add(1, Ordering::Relaxed) + 1;
-                    if n.is_multiple_of(100_000) {
-                        tracing::info!("{n} of {} chunks ({:.0}s)", chunks.len(), started.elapsed().as_secs_f64());
-                    }
-                    let checked = source.frames(std::slice::from_ref(chunk)).and_then(|frames| open_frame(chunk, &frames[0], dec));
-                    checked.err().map(|e| (*chunk, *manifest, *path, e.to_string()))
-                },
-            )
-            .flatten()
+            .filter_map(|(chunk, manifest, path)| {
+                let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                if n.is_multiple_of(100_000) {
+                    tracing::info!("{n} of {} chunks ({:.0}s)", chunks.len(), started.elapsed().as_secs_f64());
+                }
+                let checked = source.chunks(std::slice::from_ref(chunk));
+                checked.err().map(|e| (*chunk, *manifest, *path, e.to_string()))
+            })
             .collect()
     });
     bad.sort_by_key(|(chunk, ..)| chunk.id);

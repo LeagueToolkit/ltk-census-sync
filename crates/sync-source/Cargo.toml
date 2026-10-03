@@ -17,6 +17,7 @@ xxhash-rust.workspace = true
 thiserror.workspace = true
 fs-err.workspace = true
 camino.workspace = true
+ureq.workspace = true
 
 [dev-dependencies]
 sync-format.workspace = true

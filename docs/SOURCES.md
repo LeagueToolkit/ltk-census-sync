@@ -41,8 +41,9 @@ A file is its chunks in order. A chunk is identified by the first eight bytes of
 | 4 | BLAKE3 | from 16.4.7461248 |
 
 Every chunk is checked after decompression: its hash under its file's scheme and the uncompressed
-size the manifest gives. Identity is that hash alone. The same chunk can be compressed differently
-in different bundles, so compressed bytes and sizes are never compared or reused across bundles.
+size the manifest gives. A chunk is those three: its id, the hash its id is under, and its
+uncompressed size. The same chunk can be compressed differently in different bundles, so
+compressed bytes and sizes are never compared or reused across bundles.
 
 ## Bundles and the CDN
 
@@ -66,8 +67,9 @@ it ignores the header and sends the whole bundle, which is not an error, so requ
 
 ## Chunk sources
 
-A chunk is asked for **by id**, and each source finds it its own way. The sources are asked in
-order, and a chunk comes from the first that holds it:
+A chunk is asked for **by its id, its hash and its uncompressed size**, and each source finds it
+its own way and checks all three. The sources
+are asked in order, and a chunk comes from the first that holds it with bytes that check:
 
 - **The cache**: chunks already fetched, on local disk. Checked first; what the CDN returns is
   written back, so a chunk is downloaded once. Whether it keeps chunks by id or whole bundles is
@@ -76,7 +78,9 @@ order, and a chunk comes from the first that holds it:
   `channels/public/bundles/<BUNDLE ID>.bundle` under one directory, read by the layout of the
   manifest being read, as from the CDN. The directory can be served over HTTP as a mirror of the
   CDN.
-- **The CDN**, over https, by the layout of the manifest being read.
+- **The CDN**, over https. For a chunk the sources before it lack or hold wrong, its whole bundle
+  is downloaded into the mirror, once, after its footer is checked to name it, and the chunk is
+  read from there. Ranges of a bundle, by the requests below, are for a run without a mirror.
 - **A local merged bundle**, the form an archive of past builds keeps (rman's one bundle per part,
   with its own table from chunk id to location). Read by chunk id and its own table only, never
   with a manifest's offsets, which describe another encoding. The archive is not trusted more than

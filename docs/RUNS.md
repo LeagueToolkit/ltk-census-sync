@@ -130,3 +130,51 @@ bundle for it.
   commits are new; each differs from the published one in the misplaced chunks' entries while the
   published files of them are wrong: 3 paths through 16.15, 50 at 16.16, 3 from 16.17. At 16.19 one
   entry remains, `nami` `56a3695d9c2dbcfc`. The tags 16.15 to 16.19 move.
+
+## The archive audit (2026-10-03)
+
+- **What.** `census-sync verify --all-files` over every RMAN build of the history, 9.2 to 16.19
+  (744 manifests, the RADS builds of 8.20 to 9.1 left out): every chunk of every file, read from
+  the archive alone. 4,825,753 chunks, 1,182 s.
+- **Result.** 15 chunks do not verify, all of them BLAKE3 ids in WADs, in 8 bundles. None of the 674
+  manifests of chunking version 3 (RITO_HKDF, 9.2 to 16.3) has one, and no file but a WAD has one.
+  Five are first used by 16.4.7461248, the first build with BLAKE3 ids.
+
+| chunk | bundle | first build | size | file |
+| --- | --- | --- | ---: | --- |
+| `263a0daede511319` | `C04676802EA1EC5A` | 16.4.7461248 | 32 | `Taric.ro_RO.wad.client` |
+| `a888ebf03990f8c4` | `C04676802EA1EC5A` | 16.4.7461248 | 32 | `Taric.ro_RO.wad.client` |
+| `681e1bbfee666347` | `C04676802EA1EC5A` | 16.4.7461248 | 32 | `Taric.tr_TR.wad.client` |
+| `86551fd68445611d` | `C04676802EA1EC5A` | 16.4.7461248 | 32 | `Taric.tr_TR.wad.client` |
+| `8594fe8cae13abf5` | `B9640EB24AE08202` | 16.4.7461248 | 1995 | `Chogath.wad.client` |
+| `875d82ed8116fb9e` | `8E5691EADF0E1714` | 16.15.7983109 | 715 | `Teemo.wad.client` |
+| `2ec41a77f91276aa` | `546A29A0F5A25391` | 16.16.8032921 | 1064 | `Taliyah.wad.client` |
+| `589b84454d8a4816` | `2D29125CE022A1B4` | 16.16.8032921 | 325 | `Jhin.wad.client` |
+| `ee5a18111dd664b7` | `2D29125CE022A1B4` | 16.16.8032921 | 325 | `Jhin.wad.client` |
+| `f5f6d414758c5f32` | `2D29125CE022A1B4` | 16.16.8032921 | 325 | `Jhin.wad.client` |
+| `59882ebfd07cba35` | `2D29125CE022A1B4` | 16.16.8032921 | 283 | `Jinx.wad.client` |
+| `6ae22b8cbe897a46` | `2D29125CE022A1B4` | 16.16.8032921 | 283 | `Jinx.wad.client` |
+| `8c8cfbc44a039927` | `65FD50F448174293` | 16.16.8032921 | 114 | `Nami.wad.client` |
+| `bccec0284fe115e1` | `3B96C3FD48CCF283` | 16.16.8032921 | 1766 | `Riven.wad.client` |
+| `fbacf206d7de9ee3` | `A65363806117E40B` | 16.16.8032921 | 948 | `Milio.wad.client` |
+
+Sizes are uncompressed, in bytes; files are under `DATA/FINAL/Champions/`. The ten from 16.15 on
+are the ones of the oracle above. Whether the five of 16.4.7461248 left wrong files in the
+published history was not checked.
+
+## The CDN as a fallback (2026-10-03)
+
+- **What.** `census-sync oracle` on 16.15.7983109 alone, onto its published parent, from the archive
+  with an empty mirror and `--cdn`.
+- **Result.** The archive's bad chunk of the build failed its check, its bundle `8E5691EADF0E1714`
+  was downloaded over https into the mirror, and the build came out as the commit the six bundles
+  gave before (`8cdff728e1f8`). 38.2 s, the download included.
+
+## The oracle over 16.4 to 16.9 (2026-10-03)
+
+- **What.** The 32 builds of 16.4 to 16.9, each onto its published parent, from the archive behind
+  the mirror, with `--cdn`.
+- **Result.** 32 of 32 trees and commits identical, 7.1 s a build, and no bundle downloaded: the
+  five bad chunks first used by 16.4.7461248 were never read. Their entries kept the checksums of
+  earlier builds, whose chunks verify, so neither the export nor an append read them. The
+  published history from 16.4 to 16.9 is correct, and the fix of 16.10 to 16.19 is the whole fix.

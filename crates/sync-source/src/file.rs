@@ -3,7 +3,7 @@
 
 use std::io::{self, Read, Seek, SeekFrom};
 
-use crate::chunk::{open_frame, ChunkSource};
+use crate::chunk::ChunkSource;
 use crate::rman::ChunkRef;
 use crate::Error;
 
@@ -17,18 +17,17 @@ pub struct FileReader<'a, S: ChunkSource + ?Sized> {
     /// The chunks of the last read, by index: a WAD's entries lie in table order, and one chunk
     /// often ends one entry and starts the next.
     held: Vec<(usize, Vec<u8>)>,
-    dec: zstd::bulk::Decompressor<'static>,
 }
 
 impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
     /// A file made of these chunks, in file order.
-    pub fn new(source: &'a S, chunks: Vec<ChunkRef>) -> Result<Self, Error> {
+    pub fn new(source: &'a S, chunks: Vec<ChunkRef>) -> Self {
         let mut starts = Vec::with_capacity(chunks.len() + 1);
         starts.push(0);
         for chunk in &chunks {
             starts.push(starts[starts.len() - 1] + u64::from(chunk.place.uncompressed_size));
         }
-        Ok(Self { source, chunks, starts, pos: 0, held: Vec::new(), dec: zstd::bulk::Decompressor::new()? })
+        Self { source, chunks, starts, pos: 0, held: Vec::new() }
     }
 
     /// The file's size.
@@ -61,11 +60,7 @@ impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
         let mut previous = std::mem::take(&mut self.held);
         let missing: Vec<usize> = range.clone().filter(|i| !previous.iter().any(|(j, _)| j == i)).collect();
         let wanted: Vec<ChunkRef> = missing.iter().map(|&i| self.chunks[i]).collect();
-        let frames = self.source.frames(&wanted)?;
-        let mut fetched = Vec::with_capacity(missing.len());
-        for ((&index, chunk), frame) in missing.iter().zip(&wanted).zip(&frames) {
-            fetched.push((index, open_frame(chunk, frame, &mut self.dec)?));
-        }
+        let mut fetched: Vec<(usize, Vec<u8>)> = missing.iter().copied().zip(self.source.chunks(&wanted)?).collect();
         for index in range {
             let data = match previous.iter().position(|(j, _)| *j == index) {
                 Some(at) => previous.swap_remove(at).1,

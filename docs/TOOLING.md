@@ -23,6 +23,8 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
   read by that commit's `BinObject::from_reader`; moving the pin is a writer change and passes the
   oracle first. A "patch was not used" warning from cargo means one of the five is unpatched.
 - **git** is a process, not a library: `ls-tree`, `cat-file --batch`, `fast-import`, `push`.
+- **`ureq`** for downloads from Riot's CDN: blocking with no async runtime, which suits a tool whose
+  parallelism is rayon's.
 - **Errors**: `thiserror` in the library crates, `anyhow` in `sync-cli`.
 - **`camino`** for filesystem paths (the clone, the cache, logs). A path in the history is a string:
   it names a tree entry, not a file on disk.
@@ -61,8 +63,9 @@ and `cargo test --workspace --locked`.
 - **Inline** for a small private helper.
 - **`tests/`** for anything with fixtures or several steps. Fixtures are built in the test (a WAD,
   a bin, a bank written by the test) or recorded small and committed.
-- **No network.** CDN behaviour is tested against recorded responses replayed by a local HTTP
-  server with range support: a handful of real range requests per chunk-hash scheme; a chunk found
+- **No network.** The CDN source is tested against a local HTTP server the test runs, serving
+  bundles the test writes. Range requests are to be tested against recorded responses replayed by
+  such a server with range support: a handful of real range requests per chunk-hash scheme; a chunk found
   in two bundles with different compressed sizes, both decompressing to the same verified bytes;
   a multi-range request past the span cap, answered with the whole bundle.
 - **Writers** are tested against files from the published history: a sample of entries per kind,

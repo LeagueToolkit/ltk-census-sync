@@ -31,7 +31,9 @@ cannot fast-forward to.
 
 Until the CDN source exists, the commands read chunks from an archive of past builds
 (`--archive`): its manifests, `game-win/<MANIFEST ID>.manifest`, and its merged bundle, behind a
-mirror of whole bundles when one is given (`--mirror`).
+mirror of whole bundles when one is given (`--mirror`). With `--cdn`, a chunk the mirror and the
+archive lack or hold wrong has its whole bundle downloaded from Riot's CDN into the mirror;
+`--cdn-host` names another host, such as a mirror served over HTTP.
 
 ## A scheduled run
 

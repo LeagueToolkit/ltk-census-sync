@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use sync_source::{BundleChunk, ChunkHash, ChunkRef, ChunkSource, Error};
+use sync_source::{open_frame, BundleChunk, ChunkHash, ChunkRef, ChunkSource, Error};
 
 /// Frames by chunk id, in memory.
 #[derive(Default)]
@@ -11,8 +11,9 @@ pub struct MemorySource {
 }
 
 impl ChunkSource for MemorySource {
-    fn frames(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
-        wanted.iter().map(|c| self.frames.get(&c.id).cloned().ok_or(Error::MissingChunk(c.id))).collect()
+    fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
+        let mut dec = zstd::bulk::Decompressor::new()?;
+        wanted.iter().map(|c| open_frame(c, self.frames.get(&c.id).ok_or(Error::MissingChunk(c.id))?, &mut dec)).collect()
     }
 }
 

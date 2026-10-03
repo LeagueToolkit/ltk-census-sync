@@ -45,7 +45,7 @@ fn a_wad_is_read_from_its_table_and_each_entry_from_its_stored_bytes() {
     ];
     let wad = wad_v3_4(&entries);
     let (source, chunks) = file_of(&wad, 50);
-    let mut file = FileReader::new(&source, chunks).unwrap();
+    let mut file = FileReader::new(&source, chunks);
     let (header, table) = read_wad_table(&mut file).unwrap();
     assert_eq!((header.major, header.minor, header.entry_count), (3, 4, 3));
     assert_eq!(
