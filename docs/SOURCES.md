@@ -91,9 +91,11 @@ are asked in order, and a chunk comes from the first that holds it with bytes th
 
 A file is read as `Read + Seek` over its chunks: a seek costs nothing, and a read fetches the
 chunks it overlaps that the reader does not hold, in one request to the source, and holds them
-until the next read. A WAD's entries lie in table order and one chunk often ends one entry and
-starts the next, so reading them in order fetches each chunk once. A WAD's table of contents is at its front, so opening a WAD fetches its first chunks only; reading
-one entry fetches the chunks that cover it. The file id skips unchanged files, the table's
+until the next read. A WAD's table of contents is at its front, so opening a WAD fetches its first
+chunks only. Its changed entries are then preloaded in table order, in batches of about 32 MB of
+stored bytes: the chunks of a batch come in one request to the source, which the CDN turns into one
+request a bundle, and are held while its entries are read. One chunk often ends one entry and
+starts the next, so each chunk is fetched once. The file id skips unchanged files, the table's
 checksums skip unchanged entries, and the chunk map skips everything neither asked for.
 
 ## Formats read

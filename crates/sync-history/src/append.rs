@@ -29,6 +29,11 @@ use crate::Error;
 /// Where a commit is written before its branch moves to it.
 const PENDING: &str = "refs/census-sync/pending";
 
+/// The stored bytes of the entries read together: their chunks come in one request to the source,
+/// which the CDN turns into one request a bundle, and are held while the entries are read, on
+/// each of the pool's threads.
+const BATCH_BYTES: u64 = 32 << 20;
+
 /// What one append did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Appended {
@@ -238,22 +243,42 @@ fn read_wad<'a>(
         unrenderable: 0,
         repeated: 0,
     };
-    for entry in &first {
-        let checksum = last[&entry.path_hash];
-        if was(entry.path_hash) == Some(checksum) {
-            continue;
+    let moved: Vec<WadEntry> = first.into_iter().filter(|e| was(e.path_hash) != Some(last[&e.path_hash])).collect();
+    for batch in batches(&moved) {
+        let ranges: Vec<(u64, u64)> = batch.iter().map(|e| (e.offset, e.stored_size)).collect();
+        reader.preload(&ranges).map_err(wad_error)?;
+        for entry in batch {
+            let checksum = last[&entry.path_hash];
+            let stored = reader.read_range(entry.offset, entry.stored_size).map_err(wad_error)?;
+            let bytes = entry_bytes(&stored, entry).map_err(wad_error)?;
+            let kind = if entry.is_link() { KIND_LINK } else { kind_of(&bytes) };
+            let files = entry_files(entry.path_hash, Some(checksum), kind, &bytes, legacy);
+            if let Some(error) = &files.error {
+                tracing::debug!("{} {:016x}: {error}", file.path, entry.path_hash);
+            }
+            read.read.insert(entry.path_hash);
+            read.unrenderable += files.unrenderable;
+            read.repeated += files.repeated;
+            read.files.extend(files.files);
         }
-        let stored = reader.read_range(entry.offset, entry.stored_size).map_err(wad_error)?;
-        let bytes = entry_bytes(&stored, entry).map_err(wad_error)?;
-        let kind = if entry.is_link() { KIND_LINK } else { kind_of(&bytes) };
-        let files = entry_files(entry.path_hash, Some(checksum), kind, &bytes, legacy);
-        if let Some(error) = &files.error {
-            tracing::debug!("{} {:016x}: {error}", file.path, entry.path_hash);
-        }
-        read.read.insert(entry.path_hash);
-        read.unrenderable += files.unrenderable;
-        read.repeated += files.repeated;
-        read.files.extend(files.files);
     }
     Ok(read)
+}
+
+/// `entries` cut into runs of about `BATCH_BYTES` stored bytes, in order; an entry larger than
+/// that is a run of its own.
+fn batches(entries: &[WadEntry]) -> Vec<&[WadEntry]> {
+    let mut out = Vec::new();
+    let (mut start, mut bytes) = (0, 0);
+    for (i, entry) in entries.iter().enumerate() {
+        if i > start && bytes + entry.stored_size > BATCH_BYTES {
+            out.push(&entries[start..i]);
+            (start, bytes) = (i, 0);
+        }
+        bytes += entry.stored_size;
+    }
+    if start < entries.len() {
+        out.push(&entries[start..]);
+    }
+    out
 }
