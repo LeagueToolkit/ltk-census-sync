@@ -49,11 +49,23 @@ and the WADs are read in parallel.
 
 ## The commit
 
-Streamed into `git fast-import` on top of the tip: `commit refs/heads/history`, the author,
-committer and message of [FORMAT.md](FORMAT.md), `from <tip>`, one `M` line per new or changed
-path with its text inline, one `D` line per deleted path. A path that keeps the tip's blob is not
-written. The stream is written through a buffer as it is produced: a build that
-rewrites many bins is gigabytes of text, more than one pipe write takes or memory should hold.
+Streamed into `git fast-import`: the author, committer and message of [FORMAT.md](FORMAT.md),
+`from <tip>`, then only what differs from the tip:
+
+- `build.yaml`;
+- a `D` line for the directory of each WAD gone from the manifest;
+- for each changed WAD, its `_wad.yaml`, an `M` line with its text inline for every file of every
+  entry read, and a `D` line for each of the tip's files of the WAD that the build no longer has:
+  an entry gone from its table, a bin entry gone from its bin.
+
+A WAD that carries over and an entry that keeps its files write nothing. The changed WADs are read
+in parallel, and each one's lines go into the stream as soon as it is read; their order does not
+change the tree. The stream is written through a buffer as it is produced: a build that rewrites
+many bins is gigabytes of text, more than one pipe write takes or memory should hold.
+
+The commit is written to `refs/census-sync/pending`, and `history` moves to it only when the import
+has succeeded, and only from the tip the append started from. An append that stops leaves
+`history` where it was.
 
 fast-import deduplicates blobs against what the repository holds, so an unchanged bin entry
 rewritten under a changed bin costs nothing.

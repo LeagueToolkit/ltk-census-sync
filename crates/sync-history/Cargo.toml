@@ -7,6 +7,17 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+sync-format.workspace = true
+sync-source.workspace = true
+camino.workspace = true
+rayon.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ltk_wad.workspace = true
+zstd.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
