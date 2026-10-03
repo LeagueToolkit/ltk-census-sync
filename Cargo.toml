@@ -62,9 +62,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
 # Scratch directories and repositories in tests.
 tempfile = "3"
-# The checks before a push load every changed YAML file into structs that reject unknown fields.
-serde = { version = "1", features = ["derive"] }
+# The checks before a push: every changed YAML file loaded and validated against the schema the
+# tree's census.yaml names for it, the schemas' patterns as regexes.
 serde_yaml_ng = "0.10"
+regex = "1"
 # A rendered file against the history's blob, as a line diff when they differ.
 pretty_assertions = "1"
 

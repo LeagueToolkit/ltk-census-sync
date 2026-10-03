@@ -37,8 +37,10 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
   writes them, and `tracing-appender` writes a run's log file. The ltk crates log through `log`;
   the subscriber's `tracing-log` feature (on by default) takes those records in when it is
   installed with `.init()`, so nothing here depends on `log` itself.
-- **`serde` and `serde_yaml_ng`** for the checks before a push only: each changed YAML file loads
-  into structs that reject unknown fields. Writing never goes through serde; the writers produce
+- **`serde_yaml_ng` and `regex`** for the checks before a push only: each changed YAML file loads
+  as a YAML value and is validated against the schema its tree's `census.yaml` names for it, read
+  from the same tree. The schemas use a small part of JSON Schema, which `sync-format` reads
+  itself, and refuses a keyword outside it. Writing never goes through serde; the writers produce
   the exact text of [FORMAT.md](FORMAT.md) themselves.
 - **`tempfile`** for scratch directories and repositories in tests;
   **`pretty_assertions`** in tests, so a rendered file that differs from the history's blob shows

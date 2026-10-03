@@ -19,6 +19,8 @@ ddsfile.workspace = true
 sha2.workspace = true
 xxhash-rust.workspace = true
 thiserror.workspace = true
+serde_yaml_ng.workspace = true
+regex.workspace = true
 
 [dev-dependencies]
 fs-err.workspace = true

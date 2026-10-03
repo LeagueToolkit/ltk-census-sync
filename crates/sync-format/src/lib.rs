@@ -13,6 +13,7 @@
 
 mod bank;
 mod bin;
+mod check;
 mod commit;
 mod entry;
 mod error;
@@ -27,6 +28,7 @@ mod yaml;
 
 pub use bank::bank_facts;
 pub use bin::{bin_facts, split_bin, BinFacts, BinSplit, ObjectSpan};
+pub use check::Census;
 pub use commit::{commit_message, commit_time, AUTHOR};
 pub use entry::{entry_files, EntryFiles};
 pub use error::Error;
