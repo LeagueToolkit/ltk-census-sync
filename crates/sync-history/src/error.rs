@@ -10,7 +10,7 @@ pub enum Error {
     #[error(transparent)]
     Source(#[from] sync_source::Error),
     /// A WAD of the build that could not be read.
-    #[error("{path}: {source}")]
+    #[error("{path}")]
     Wad { path: String, source: sync_source::Error },
     /// The tip holds something the format does not.
     #[error("the tip: {0}")]
