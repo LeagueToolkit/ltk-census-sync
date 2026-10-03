@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use common::{chunks_of, file_of};
-use sync_source::{ChunkSource, Error, FileReader, MergedBundle};
+use sync_source::{open_frame, ChunkHash, ChunkSource, Error, FileReader, MergedBundle};
 use xxhash_rust::xxh64::xxh64;
 
 fn text(len: usize) -> Vec<u8> {
@@ -47,6 +47,20 @@ fn a_chunk_that_does_not_hash_to_its_id_is_refused() {
     source.frames.remove(&chunks[0].id);
     let mut file = FileReader::new(&source, chunks.clone()).unwrap();
     assert!(matches!(file.read_range(0, 1), Err(Error::MissingChunk(id)) if id == chunks[0].id));
+}
+
+#[test]
+fn a_chunk_is_checked_only_under_the_hash_its_file_lists() {
+    let data = text(100);
+    let frame = zstd::bulk::compress(&data, 1).unwrap();
+    let (mut chunk, _) = chunks_of(&data, 100).remove(0);
+    let mut dec = zstd::bulk::Decompressor::new().unwrap();
+    assert_eq!(open_frame(&chunk, &frame, &mut dec).unwrap(), data);
+    // Its BLAKE3 id, listed as SHA-256: an id of these bytes, but not under the listed hash.
+    chunk.hash = ChunkHash::Sha256;
+    assert!(matches!(open_frame(&chunk, &frame, &mut dec), Err(Error::BadChunk { message, .. }) if message.contains("Sha256")));
+    chunk.id = ChunkHash::Sha256.id_of(&data);
+    assert_eq!(open_frame(&chunk, &frame, &mut dec).unwrap(), data);
 }
 
 #[test]
