@@ -130,6 +130,8 @@ bundle for it.
   commits are new; each differs from the published one in the misplaced chunks' entries while the
   published files of them are wrong: 3 paths through 16.15, 50 at 16.16, 3 from 16.17. At 16.19 one
   entry remains, `nami` `56a3695d9c2dbcfc`. The tags 16.15 to 16.19 move.
+- **Published** (2026-10-03, by the user): `history` replaced from 16.15 on, its tip `39fa90b1`, and
+  the tags 16.15 to 16.19 moved; the repository was private, so no other clone held the old commits.
 
 ## The archive audit (2026-10-03)
 
