@@ -1,0 +1,16 @@
+[package]
+name = "sync-cli"
+description = "census-sync: append new live builds of League of Legends to the census history"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "census-sync"
+path = "src/main.rs"
+
+[dependencies]
+
+[lints]
+workspace = true

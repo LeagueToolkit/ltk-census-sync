@@ -1,0 +1,12 @@
+[package]
+name = "sync-history"
+description = "The history repository: the tip's state, the next commit through git fast-import, tags and notes, checks before a push"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

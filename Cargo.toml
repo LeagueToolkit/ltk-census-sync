@@ -1,0 +1,81 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+sync-format = { path = "crates/sync-format" }
+sync-source = { path = "crates/sync-source" }
+sync-history = { path = "crates/sync-history" }
+
+# LeagueToolkit crates: every League format with an ltk crate is read through it.
+ltk_hash = "0.4"
+ltk_primitives = "0.3"
+ltk_io_ext = "0.4.4"
+ltk_file = "0.2.11"
+ltk_wad = "0.5.4"
+ltk_meta = "0.8.6"
+ltk_mesh = "0.4.6"
+ltk_anim = "0.3.7"
+ltk_texture = "0.6.1"
+ltk_ritobin = "0.9.0"
+
+# Manifests: a flatbuffer body, zstd chunks, four chunk-hash schemes (docs/SOURCES.md).
+flatbuffers = "25.12"
+# The major ltk_wad builds against, so one native zstd is linked.
+zstd = "0.13"
+sha2 = "0.10"
+pbkdf2 = "0.12"
+blake3 = "1"
+xxhash-rust = { version = "0.8", features = ["xxh64", "xxh3"] }
+
+# Every filesystem call: its errors name the path (clippy.toml forbids `std::fs`).
+fs-err = "3"
+# Filesystem paths as UTF-8. Paths inside the history are strings, not these.
+camino = "1"
+clap = { version = "4", features = ["derive", "env"] }
+anyhow = "1"
+thiserror = "2"
+rayon = "1"
+# A span per build, WAD and entry, so a failure in a scheduled run's log names where it happened.
+# The ltk crates log through `log`, which the subscriber takes in too.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+# The sparse file a CDN read materialises into; scratch repositories in tests.
+tempfile = "3"
+# The checks before a push load every changed YAML file into structs that reject unknown fields.
+serde = { version = "1", features = ["derive"] }
+serde_yaml_ng = "0.10"
+# A rendered file against the history's blob, as a line diff when they differ.
+pretty_assertions = "1"
+
+# ltk_ritobin with C++ ritobin's canonical text (`PrintCanonical`), LeagueToolkit/league-toolkit#269
+# at 521a875, until it is released: the history's bin entries are that text, byte for byte. The
+# crates its types are made of come from the same commit, so the build holds one ltk_meta and one
+# ltk_hash.
+[patch.crates-io]
+ltk_ritobin = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "521a875e7c281da1ef98fad93dd822ae8b68f430" }
+ltk_meta = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "521a875e7c281da1ef98fad93dd822ae8b68f430" }
+ltk_hash = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "521a875e7c281da1ef98fad93dd822ae8b68f430" }
+ltk_primitives = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "521a875e7c281da1ef98fad93dd822ae8b68f430" }
+ltk_io_ext = { git = "https://github.com/LeagueToolkit/league-toolkit", rev = "521a875e7c281da1ef98fad93dd822ae8b68f430" }
+
+[profile.release]
+debug = "line-tables-only"
+
+[workspace.lints.rust]
+warnings = "warn"
+
+[workspace.lints.clippy]
+correctness = { level = "deny", priority = -1 }
+suspicious  = { level = "deny", priority = -1 }
+perf        = { level = "warn", priority = -1 }
+style       = { level = "warn", priority = -1 }
+complexity  = { level = "warn", priority = -1 }
+pedantic    = { level = "allow", priority = -1 }

@@ -1,0 +1,12 @@
+[package]
+name = "sync-format"
+description = "Format 2 of the census history: file names, the YAML families, bin entries as ritobin text, and the facts read from an entry's bytes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

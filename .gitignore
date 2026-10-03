@@ -1,0 +1,37 @@
+# Rust build artifacts
+debug/
+target/
+**/*.rs.bk
+*.pdb
+
+# Profiling
+flamegraph.svg
+perf.data
+perf.data.old
+
+# Editor
+.vscode/
+.idea/
+*.sw?
+*.iml
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+
+# AI local settings
+.agents/
+.claude/
+.codex/
+.mcp.json
+.scratch/
+
+# Windows
+nul
+*:Zone.Identifier
+
+# Local state: the working clone of the history, the chunk cache, run logs, scratch
+data/
