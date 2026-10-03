@@ -4,7 +4,7 @@ use std::io::Cursor;
 
 use common::file_of;
 use ltk_wad::{WadChunk, WadHash};
-use sync_source::{entry_bytes, read_wad_table, FileReader, WadChunkCompression, WadEntry};
+use sync_source::{entry_bytes, read_wad_table, Error, FileReader, WadChunkCompression, WadEntry};
 
 /// A v3.4 WAD of these entries: (path hash, compression, bytes as stored, size).
 fn wad_v3_4(entries: &[(u64, WadChunkCompression, Vec<u8>, usize)]) -> Vec<u8> {
@@ -50,7 +50,7 @@ fn a_wad_is_read_from_its_table_and_each_entry_from_its_stored_bytes() {
     assert_eq!((header.major, header.minor, header.entry_count), (3, 4, 3));
     assert_eq!(
         table[1],
-        WadEntry { path_hash: 0x20, offset: 368 + entries[0].2.len() as u64, stored_size: 5, size: 5, compression: WadChunkCompression::None, checksum: Some(0xC1) }
+        WadEntry { path_hash: 0x20, offset: 368 + entries[0].2.len() as u64, stored_size: 5, size: 5, compression: WadChunkCompression::None, checksum: 0xC1 }
     );
     assert!(table[2].is_link() && !table[0].is_link());
     let read = |file: &mut FileReader<_>, e: &WadEntry| entry_bytes(&file.read_range(e.offset, e.stored_size).unwrap(), e).unwrap();
@@ -60,27 +60,13 @@ fn a_wad_is_read_from_its_table_and_each_entry_from_its_stored_bytes() {
 }
 
 #[test]
-fn a_v1_table_has_no_checksums() {
-    let mut bytes = b"RW\x01\x01".to_vec();
-    bytes.extend(12u16.to_le_bytes()); // the table's offset
-    bytes.extend(24u16.to_le_bytes()); // an entry's size
-    bytes.extend(1i32.to_le_bytes());
-    bytes.extend(0x10u64.to_le_bytes());
-    for field in [36u32, 3, 9] {
-        bytes.extend(field.to_le_bytes());
-    }
-    bytes.extend([1, 0, 0, 0]); // gzip
-    bytes.extend(b"xyz");
-    let (header, table) = read_wad_table(&mut Cursor::new(bytes)).unwrap();
-    assert_eq!((header.table_offset, header.entry_size), (12, 24));
-    assert_eq!(table, [WadEntry { path_hash: 0x10, offset: 36, stored_size: 3, size: 9, compression: WadChunkCompression::GZip, checksum: None }]);
-}
-
-#[test]
-fn a_table_past_the_end_of_its_file_is_refused() {
+fn a_table_past_the_end_or_another_version_is_refused() {
     let mut bytes = b"RW\x03\x04".to_vec();
     bytes.extend([0u8; 264]);
     bytes.extend(1_000_000i32.to_le_bytes());
     assert!(read_wad_table(&mut Cursor::new(bytes)).is_err());
-    assert!(read_wad_table(&mut Cursor::new(b"RW\x09\x00".to_vec())).is_err());
+    // Version 2, which no build from 8.20 ships.
+    let mut v2 = b"RW\x02\x00".to_vec();
+    v2.extend([0u8; 100]);
+    assert!(matches!(read_wad_table(&mut Cursor::new(v2)), Err(Error::Wad(m)) if m.starts_with("version 2.0")));
 }

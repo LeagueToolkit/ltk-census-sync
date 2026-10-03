@@ -130,7 +130,7 @@ fn every_entry_of_some_wads_reads_and_renders_as_published() {
         let (_, table) = read_wad_table(&mut reader).expect("the table");
         // A path hash the table lists twice takes its first entry's bytes and its last checksum.
         let mut first: Vec<_> = Vec::new();
-        let mut checksum: HashMap<u64, Option<u64>> = HashMap::new();
+        let mut checksum: HashMap<u64, u64> = HashMap::new();
         for e in &table {
             if checksum.insert(e.path_hash, e.checksum).is_none() {
                 first.push(*e);
@@ -143,7 +143,7 @@ fn every_entry_of_some_wads_reads_and_renders_as_published() {
         for e in &first {
             let bytes = entry_bytes(&reader.read_range(e.offset, e.stored_size).expect("the stored bytes"), e).expect("the bytes");
             let kind = if e.is_link() { KIND_LINK } else { kind_of(&bytes) };
-            for (name, text) in entry_files(e.path_hash, checksum[&e.path_hash], kind, &bytes, legacy).files {
+            for (name, text) in entry_files(e.path_hash, Some(checksum[&e.path_hash]), kind, &bytes, legacy).files {
                 rendered.insert(format!("{dir}/{name}"), text);
             }
         }
@@ -161,7 +161,7 @@ fn every_entry_of_some_wads_reads_and_renders_as_published() {
         let own = published.keys().filter(|p| p.ends_with(".yaml")).count();
         for e in &first {
             let yaml = &texts[&format!("{dir}/{:02x}/{:016x}.yaml", e.path_hash >> 56, e.path_hash)];
-            assert_eq!(field(yaml, "checksum"), checksum[&e.path_hash].map(|c| format!("{c:016x}")), "{path} {:016x}", e.path_hash);
+            assert_eq!(field(yaml, "checksum"), Some(format!("{:016x}", checksum[&e.path_hash])), "{path} {:016x}", e.path_hash);
         }
         eprintln!("{path}: {} entries, {own} entry files, {} files", first.len(), published.len());
         entries += first.len();
