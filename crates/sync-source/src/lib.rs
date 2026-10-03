@@ -18,7 +18,7 @@ mod rman;
 mod wad;
 
 pub use cache::ChunkCache;
-pub use cdn::{Cdn, Downloaded, BUNDLE_HOST, MANIFEST_HOST};
+pub use cdn::{Cdn, CdnSource, Downloaded, BUNDLE_HOST, MANIFEST_HOST};
 pub use chunk::{open_frame, ChunkSource};
 pub use chunk_hash::ChunkHash;
 pub use error::Error;

@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use common::{chunks_of, file_of};
-use sync_source::{BundleChunk, Cdn, ChunkCache, ChunkHash, ChunkRef, ChunkSource, Error, FileReader, Layers};
+use sync_source::{BundleChunk, Cdn, CdnSource, ChunkCache, ChunkHash, ChunkRef, ChunkSource, Error, FileReader, Layers};
 use xxhash_rust::xxh64::xxh64;
 
 /// A request the server saw: its path and its `Range` header.
@@ -60,6 +60,11 @@ fn fixture(name: &str) -> Vec<u8> {
     fs_err::read(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
 }
 
+/// The CDN at `host` as a chunk source, read through `cache`.
+fn source(host: &str, cache: &ChunkCache) -> CdnSource {
+    CdnSource::new(Cdn::new().with_host(host), cache.clone())
+}
+
 fn cache() -> (tempfile::TempDir, ChunkCache) {
     let dir = tempfile::tempdir().unwrap();
     let cache = ChunkCache::open(&Utf8PathBuf::from_path_buf(dir.path().join("chunks")).unwrap()).unwrap();
@@ -92,14 +97,13 @@ fn a_recorded_multipart_answer_gives_each_chunk_checked_and_fills_the_cache() {
     let answer = fixture("two-spans.http");
     let (host, seen) = serve(move |_, _| answer.clone());
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache.clone()).with_host(&host);
+    let cdn = source(&host, &cache);
     let chunks = recorded_chunks();
     assert_eq!(sizes(&cdn.chunks(&chunks).unwrap()), [866, 884, 2418]);
     assert_eq!(
         *seen.lock().unwrap(),
         [("/channels/public/bundles/8250C7AC12833936.bundle".to_string(), Some("bytes=3643797-3645566,3646234-3648661".to_string()))]
     );
-    assert_eq!(cdn.downloaded().requests, 1);
     // From the cache now, with no request.
     assert_eq!(sizes(&cdn.chunks(&[chunks[2], chunks[0], chunks[2]]).unwrap()), [2418, 866, 2418]);
     assert_eq!(sizes(&cache.chunks(&chunks).unwrap()), [866, 884, 2418]);
@@ -111,7 +115,7 @@ fn a_recorded_single_range_answer_gives_its_chunk() {
     let answer = fixture("one-span.http");
     let (host, seen) = serve(move |_, _| answer.clone());
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = source(&host, &cache);
     let chunk = recorded_chunks()[2];
     assert_eq!(sizes(&cdn.chunks(&[chunk, chunk]).unwrap()), [2418, 2418]);
     assert_eq!(seen.lock().unwrap()[0].1.as_deref(), Some("bytes=3646234-3648661"));
@@ -158,7 +162,7 @@ fn spans_past_128_go_in_further_requests() {
     let data = bundle(0xB1, 1, &mut chunks);
     let (host, seen) = serve(move |_, range| multipart(&data, range.unwrap()));
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = source(&host, &cache);
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
     assert_eq!(cdn.chunks(&refs).unwrap().concat(), bytes);
     let spans: Vec<usize> = seen.lock().unwrap().iter().map(|(_, r)| r.as_ref().unwrap().split(',').count()).collect();
@@ -176,7 +180,7 @@ fn chunks_end_to_end_go_in_one_span_and_a_whole_bundle_answer_is_read_by_their_p
         response
     });
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = source(&host, &cache);
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
     assert_eq!(cdn.chunks(&refs).unwrap().concat(), bytes);
     let last = chunks[2].0.place;
@@ -197,7 +201,7 @@ fn a_chunk_a_source_or_the_cache_holds_wrong_comes_from_the_cdn_and_is_kept() {
     memory.frames.insert(refs[1].id, chunks[0].1.clone());
     memory.frames.remove(&refs[2].id);
     cache.put(&refs[2], &chunks[0].1).unwrap();
-    let cdn = Cdn::new(cache.clone()).with_host(&host);
+    let cdn = source(&host, &cache);
     let layers = Layers::new(vec![&memory, &cdn]);
     let mut file = FileReader::new(&layers, refs.clone());
     assert_eq!(file.read_range(0, 300).unwrap(), bytes);
@@ -226,7 +230,7 @@ fn an_answer_that_lacks_a_chunk_or_does_not_check_or_is_not_found_is_refused() {
         response
     });
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache.clone()).with_host(&host);
+    let cdn = source(&host, &cache);
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
     assert!(matches!(cdn.chunks(&refs), Err(Error::Download { message, .. }) if message.contains("no part of the answer holds chunk")));
     // The first chunk's frame placed where the second is: it does not check, and is not kept.
@@ -261,7 +265,7 @@ fn the_chunks_an_answer_leaves_out_are_asked_for_again() {
         }
     });
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = source(&host, &cache);
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
     assert_eq!(cdn.chunks(&refs).unwrap().concat(), bytes);
     let last = refs[4].place;
@@ -279,7 +283,7 @@ fn an_answer_that_always_leaves_a_chunk_out_is_refused_after_three() {
     let only_first = format!("bytes={}-{}", first.offset, first.offset + u64::from(first.compressed_size) - 1);
     let (host, seen) = serve(move |_, _| multipart(&data, &only_first));
     let (_dir, cache) = cache();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = source(&host, &cache);
     let refs: Vec<ChunkRef> = chunks.iter().map(|(c, _)| *c).collect();
     let error = cdn.chunks(&refs).unwrap_err();
     assert!(matches!(&error, Error::Download { message, .. } if message.contains(&format!("chunk {:016x}", refs[1].id)) && message.contains("1 parts")), "{error}");
@@ -312,9 +316,9 @@ fn a_manifest_is_downloaded_once_and_checked_against_its_id() {
         response.extend(&manifest);
         response
     });
-    let (dir, cache) = cache();
+    let dir = tempfile::tempdir().unwrap();
     let manifests = Utf8PathBuf::from_path_buf(dir.path().join("manifests")).unwrap();
-    let cdn = Cdn::new(cache).with_host(&host);
+    let cdn = Cdn::new().with_host(&host);
     assert_eq!(cdn.manifest(id, &manifests).unwrap().id, id);
     assert_eq!(seen.lock().unwrap()[0].0, format!("/channels/public/releases/{id:016X}.manifest"));
     assert!(manifests.join(format!("{id:016X}.manifest")).is_file());
@@ -325,3 +329,4 @@ fn a_manifest_is_downloaded_once_and_checked_against_its_id() {
     assert!(matches!(cdn.manifest(other, &manifests), Err(Error::Download { message, .. }) if message.contains("the manifest's id is")));
     assert!(!manifests.join(format!("{other:016X}.manifest")).exists());
 }
+

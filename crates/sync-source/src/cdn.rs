@@ -1,10 +1,10 @@
-//! Riot's CDN as a chunk source (`docs/SOURCES.md`, "Bundles and the CDN"). A read's chunks are
-//! fetched by multi-range requests to their bundles, the spans of one bundle in one request, and
-//! read through the chunk cache, so a chunk is downloaded once. Manifests come from the CDN too.
+//! Riot's CDN (`docs/SOURCES.md`, "Bundles and the CDN"): manifests and chunks. A read's chunks are fetched by multi-range requests to their bundles, the spans of
+//! one bundle in one request, and read through the chunk cache, so a chunk is downloaded once.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use camino::Utf8Path;
@@ -28,22 +28,34 @@ const ATTEMPTS: u32 = 3;
 /// The largest body read: a whole bundle is tens of megabytes, a manifest about twenty.
 const MAX_BODY: u64 = 1 << 30;
 
-/// The CDN, read through a chunk cache.
+/// Riot's CDN, or a mirror of it. Clones share one connection pool and one count of what was
+/// downloaded.
+#[derive(Clone)]
 pub struct Cdn {
     bundle_host: String,
     manifest_host: String,
-    cache: ChunkCache,
     agent: ureq::Agent,
+    counts: Arc<Counts>,
+}
+
+#[derive(Default)]
+struct Counts {
     requests: AtomicU64,
     bytes: AtomicU64,
 }
 
-/// What a CDN source has downloaded.
+/// What a CDN has downloaded.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Downloaded {
     pub requests: u64,
     /// Body bytes.
     pub bytes: u64,
+}
+
+/// The CDN as a chunk source, read through the chunk cache.
+pub struct CdnSource {
+    cdn: Cdn,
+    cache: ChunkCache,
 }
 
 /// A response, read whole.
@@ -54,35 +66,34 @@ struct Answer {
     body: Vec<u8>,
 }
 
+impl Default for Cdn {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Cdn {
-    /// Riot's CDN, read through `cache`.
-    pub fn new(cache: ChunkCache) -> Self {
+    /// Riot's CDN.
+    pub fn new() -> Self {
         let agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(Duration::from_secs(300)))
             .build()
             .into();
-        Self {
-            bundle_host: BUNDLE_HOST.to_string(),
-            manifest_host: MANIFEST_HOST.to_string(),
-            cache,
-            agent,
-            requests: AtomicU64::new(0),
-            bytes: AtomicU64::new(0),
-        }
+        Self { bundle_host: BUNDLE_HOST.to_string(), manifest_host: MANIFEST_HOST.to_string(), agent, counts: Arc::default() }
     }
 
-    /// The same source at one host that serves both manifests and bundles at Riot's paths, such
-    /// as a mirror served over HTTP.
+    /// The same at one host that serves both manifests and bundles at Riot's paths, such as a
+    /// mirror served over HTTP.
     pub fn with_host(mut self, host: &str) -> Self {
         self.bundle_host = host.trim_end_matches('/').to_string();
         self.manifest_host = self.bundle_host.clone();
         self
     }
 
-    /// What this source has downloaded so far.
+    /// What this CDN and its clones have downloaded so far.
     pub fn downloaded(&self) -> Downloaded {
-        Downloaded { requests: self.requests.load(Ordering::Relaxed), bytes: self.bytes.load(Ordering::Relaxed) }
+        Downloaded { requests: self.counts.requests.load(Ordering::Relaxed), bytes: self.counts.bytes.load(Ordering::Relaxed) }
     }
 
     /// A manifest by id: from `dir/<ID>.manifest` when it is there, else downloaded, checked to be
@@ -92,7 +103,7 @@ impl Cdn {
         if path.is_file() {
             return Manifest::read(&path);
         }
-        let url = format!("{}/channels/public/releases/{id:016X}.manifest", self.manifest_host);
+        let url = self.manifest_url(id);
         let fail = |message: String| Error::Download { url: url.clone(), message };
         let answer = self.get(&url, None)?;
         if answer.status != 200 {
@@ -102,58 +113,12 @@ impl Cdn {
         if manifest.id != id {
             return Err(fail(format!("the manifest's id is {:016X}", manifest.id)));
         }
-        fs_err::create_dir_all(dir)?;
-        let part = path.with_extension("manifest.part");
-        fs_err::write(&part, &answer.body)?;
-        fs_err::rename(&part, &path)?;
+        write(&path, &answer.body)?;
         Ok(manifest)
     }
 
-    /// The chunks, each from the bundle and place its manifest gives: the spans of one bundle in
-    /// as few requests as `MAX_SPANS` allows. Each frame that checks is kept in the cache.
-    fn fetch(&self, missing: &[ChunkRef]) -> Result<HashMap<ChunkRef, Vec<u8>>, Error> {
-        let mut by_bundle: BTreeMap<u64, Vec<ChunkRef>> = BTreeMap::new();
-        for chunk in missing {
-            by_bundle.entry(chunk.place.bundle).or_default().push(*chunk);
-        }
-        let mut fetched = HashMap::with_capacity(missing.len());
-        for (bundle, mut chunks) in by_bundle {
-            chunks.sort_by_key(|c| c.place.offset);
-            chunks.dedup();
-            let url = format!("{}/{}", self.bundle_host, bundle_url_path(bundle));
-            // An answer has been seen to leave out a part it was asked for (`docs/RUNS.md`): the
-            // chunks it lacks are asked for again.
-            for attempt in 1..=ATTEMPTS {
-                let mut lacking = Vec::new();
-                let mut shape = String::new();
-                for batch in spans(&chunks).chunks(MAX_SPANS) {
-                    let ranges = self.ranges(&url, batch)?;
-                    let before = lacking.len();
-                    for chunk in &chunks[batch[0].2.start..batch[batch.len() - 1].2.end] {
-                        let (offset, size) = (chunk.place.offset, u64::from(chunk.place.compressed_size));
-                        let Some(frame) = ranges.get(offset, size) else {
-                            lacking.push(*chunk);
-                            continue;
-                        };
-                        let data = open(chunk, frame)?;
-                        self.cache.put(chunk, frame)?;
-                        fetched.insert(*chunk, data);
-                    }
-                    if lacking.len() > before {
-                        shape = format!("{} spans asked, {}", batch.len(), ranges.shape());
-                    }
-                }
-                let Some(first) = lacking.first() else { break };
-                let (offset, size) = (first.place.offset, first.place.compressed_size);
-                let message = format!("no part of the answer holds chunk {:016x} at {offset}+{size}; {shape}", first.id);
-                if attempt == ATTEMPTS {
-                    return Err(Error::Download { url, message });
-                }
-                tracing::warn!("{url}: {message}; asking again for the {} chunks it lacks", lacking.len());
-                chunks = lacking;
-            }
-        }
-        Ok(fetched)
+    fn manifest_url(&self, id: u64) -> String {
+        format!("{}/channels/public/releases/{id:016X}.manifest", self.manifest_host)
     }
 
     /// One request for these spans of the bundle at `url`.
@@ -193,7 +158,7 @@ impl Cdn {
         if let Some(range) = range {
             request = request.header("Range", range);
         }
-        self.requests.fetch_add(1, Ordering::Relaxed);
+        self.counts.requests.fetch_add(1, Ordering::Relaxed);
         let mut response = request.call().map_err(|e| e.to_string())?;
         let status = response.status().as_u16();
         if status >= 500 {
@@ -202,8 +167,73 @@ impl Cdn {
         let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_string);
         let (content_type, content_range) = (header("content-type"), header("content-range"));
         let body = response.body_mut().with_config().limit(MAX_BODY).read_to_vec().map_err(|e| e.to_string())?;
-        self.bytes.fetch_add(body.len() as u64, Ordering::Relaxed);
+        self.counts.bytes.fetch_add(body.len() as u64, Ordering::Relaxed);
         Ok(Answer { status, content_type, content_range, body })
+    }
+}
+
+/// Writes a file whole: to a `.part` beside it first, then moved into place.
+fn write(path: &Utf8Path, bytes: &[u8]) -> Result<(), Error> {
+    if let Some(dir) = path.parent() {
+        fs_err::create_dir_all(dir)?;
+    }
+    let part = path.with_file_name(format!("{}.part", path.file_name().unwrap_or_default()));
+    fs_err::write(&part, bytes)?;
+    fs_err::rename(&part, path)?;
+    Ok(())
+}
+
+impl CdnSource {
+    /// Chunks from `cdn`, read through `cache`.
+    pub fn new(cdn: Cdn, cache: ChunkCache) -> Self {
+        Self { cdn, cache }
+    }
+
+    /// The chunks, each from the bundle and place its manifest gives: the spans of one bundle in
+    /// as few requests as `MAX_SPANS` allows. Each frame that checks is kept in the cache.
+    fn fetch(&self, missing: &[ChunkRef]) -> Result<HashMap<ChunkRef, Vec<u8>>, Error> {
+        let mut by_bundle: BTreeMap<u64, Vec<ChunkRef>> = BTreeMap::new();
+        for chunk in missing {
+            by_bundle.entry(chunk.place.bundle).or_default().push(*chunk);
+        }
+        let mut fetched = HashMap::with_capacity(missing.len());
+        for (bundle, mut chunks) in by_bundle {
+            chunks.sort_by_key(|c| c.place.offset);
+            chunks.dedup();
+            let url = format!("{}/{}", self.cdn.bundle_host, bundle_url_path(bundle));
+            // An answer has been seen to leave out a part it was asked for (`docs/RUNS.md`): the
+            // chunks it lacks are asked for again.
+            for attempt in 1..=ATTEMPTS {
+                let mut lacking = Vec::new();
+                let mut shape = String::new();
+                for batch in spans(&chunks).chunks(MAX_SPANS) {
+                    let ranges = self.cdn.ranges(&url, batch)?;
+                    let before = lacking.len();
+                    for chunk in &chunks[batch[0].2.start..batch[batch.len() - 1].2.end] {
+                        let (offset, size) = (chunk.place.offset, u64::from(chunk.place.compressed_size));
+                        let Some(frame) = ranges.get(offset, size) else {
+                            lacking.push(*chunk);
+                            continue;
+                        };
+                        let data = open(chunk, frame)?;
+                        self.cache.put(chunk, frame)?;
+                        fetched.insert(*chunk, data);
+                    }
+                    if lacking.len() > before {
+                        shape = format!("{} spans asked, {}", batch.len(), ranges.shape());
+                    }
+                }
+                let Some(first) = lacking.first() else { break };
+                let (offset, size) = (first.place.offset, first.place.compressed_size);
+                let message = format!("no part of the answer holds chunk {:016x} at {offset}+{size}; {shape}", first.id);
+                if attempt == ATTEMPTS {
+                    return Err(Error::Download { url, message });
+                }
+                tracing::warn!("{url}: {message}; asking again for the {} chunks it lacks", lacking.len());
+                chunks = lacking;
+            }
+        }
+        Ok(fetched)
     }
 }
 
@@ -233,7 +263,7 @@ fn boundary(content_type: &str) -> Option<&str> {
     params.find_map(|p| p.trim().strip_prefix("boundary=")).map(|b| b.trim_matches('"'))
 }
 
-impl ChunkSource for Cdn {
+impl ChunkSource for CdnSource {
     fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
         let mut cached = Vec::with_capacity(wanted.len());
         let mut missing = Vec::new();

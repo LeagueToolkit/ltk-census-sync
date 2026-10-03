@@ -12,7 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
 use sync_history::{append, build_facts, Appended, Git};
-use sync_source::{BundleMirror, Cdn, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest};
+use sync_source::{BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest};
 
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
@@ -119,22 +119,28 @@ struct VerifyArgs {
 struct Inputs {
     manifests: Utf8PathBuf,
     mirror: Option<BundleMirror>,
-    cache: ChunkCache,
     cdn: Option<Cdn>,
+    chunks: Box<dyn ChunkSource>,
+}
+
+/// Riot's CDN, or `host` in its place.
+fn cdn_at(host: Option<&str>) -> Cdn {
+    match host {
+        Some(host) => Cdn::new().with_host(host),
+        None => Cdn::new(),
+    }
 }
 
 impl Inputs {
     fn open(sources: &Sources) -> Result<Self> {
         let cache = ChunkCache::open(&sources.cache).with_context(|| format!("opening the chunk cache {}", sources.cache))?;
-        let cdn = (!sources.offline).then(|| {
-            let cdn = Cdn::new(cache.clone());
-            match &sources.cdn_host {
-                Some(host) => cdn.with_host(host),
-                None => cdn,
-            }
-        });
+        let cdn = (!sources.offline).then(|| cdn_at(sources.cdn_host.as_deref()));
+        let chunks: Box<dyn ChunkSource> = match &cdn {
+            Some(cdn) => Box::new(CdnSource::new(cdn.clone(), cache)),
+            None => Box::new(cache),
+        };
         let mirror = sources.mirror.as_deref().map(BundleMirror::new);
-        Ok(Self { manifests: sources.manifests.clone(), mirror, cache, cdn })
+        Ok(Self { manifests: sources.manifests.clone(), mirror, cdn, chunks })
     }
 
     fn manifest(&self, id: u64) -> Result<Manifest> {
@@ -149,10 +155,7 @@ impl Inputs {
         if let Some(mirror) = &self.mirror {
             layers.push(mirror);
         }
-        match &self.cdn {
-            Some(cdn) => layers.push(cdn),
-            None => layers.push(&self.cache),
-        }
+        layers.push(self.chunks.as_ref());
         Layers::new(layers)
     }
 
