@@ -29,11 +29,13 @@ cannot fast-forward to.
 | `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in |
 | `census-sync rebuild <commit> <count>` | re-append `count` builds after `commit` in a row on a branch of its own, from their bytes and their published facts, and list where each tag of the range would move; the history as its bytes write it, for a fix of the published history |
 
-Until the CDN source exists, the commands read chunks from an archive of past builds
-(`--archive`): its manifests, `game-win/<MANIFEST ID>.manifest`, and its merged bundle, behind a
-mirror of whole bundles when one is given (`--mirror`). With `--cdn`, a chunk the mirror and the
-archive lack or hold wrong has its whole bundle downloaded from Riot's CDN into the mirror;
-`--cdn-host` names another host, such as a mirror served over HTTP.
+The commands read chunks from an archive of past builds (`--archive`): its manifests,
+`game-win/<MANIFEST ID>.manifest`, and its merged bundle, behind a mirror of whole bundles when one
+is given (`--mirror`). With `--cdn`, a chunk the mirror and the archive lack or hold wrong is
+fetched by range from Riot's CDN through the chunk cache (`--cache`), once
+([SOURCES.md](SOURCES.md), "Chunk sources"); `--cdn-host` names one host that serves bundles at
+Riot's paths, such as a mirror served over HTTP, in place of Riot's. One run holds the cache at a
+time.
 
 ## A scheduled run
 
@@ -74,10 +76,10 @@ and running again is the whole recovery.
 
 ```
 data/history.git   the working clone
-data/chunks/       the chunk cache, by chunk id
+data/chunks/       the chunk cache: frames by hash scheme, uncompressed size and chunk id
 data/cdn/          whole bundles at their CDN paths, a mirror
 data/logs/         one log per run
 ```
 
-The chunk cache grows by what each build changed; how much to keep is open
+The chunk cache grows by what each build changed, 2 to 4 GB a patch; how much to keep is open
 ([ROADMAP.md](ROADMAP.md)).

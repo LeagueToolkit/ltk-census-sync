@@ -51,14 +51,11 @@ workspace then depends on; a GitHub-hosted schedule as an alternative to the NAS
 - **Realm notes.** What a note in `refs/notes/realms` holds when a realm adopts a build after it was
   appended: proposed, the full sorted realm list as of the note, one line, so the newest note is
   the answer.
-- **Multi-range requests.** `ureq` (the HTTP client, [TOOLING.md](TOOLING.md)) has no
-  `multipart/byteranges` reader; the CDN source's range requests need one written here.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
-- **The chunk cache.** Whole bundles at their CDN paths, the mirror's form, which a run reads by the
-  manifest's layout and which can be served over HTTP as a mirror (proposed 2026-10-03); or chunks
-  by id, which a run fetches by range and which hold only what it read. And how much to keep: the
-  next build shares most chunks with the last.
+- **How much the chunk cache keeps.** A build's chunks are almost never read again by the next
+  build (0.5% of them over 16.10-16.19, [RUNS.md](RUNS.md)), so the cache serves a run retried or
+  re-run more than the next build. Nothing is pruned; it grows by 2 to 4 GB a patch.
 - **The pause after large builds.** An append that rewrote several hundred thousand files was
   followed by one to two minutes of nothing before the next build started ([RUNS.md](RUNS.md)).
   Probably the OS writing back the uncompressed pack the import left; measure before changing

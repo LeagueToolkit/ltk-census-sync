@@ -19,6 +19,7 @@ fs-err.workspace = true
 camino.workspace = true
 ureq.workspace = true
 fjall.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 sync-format.workspace = true

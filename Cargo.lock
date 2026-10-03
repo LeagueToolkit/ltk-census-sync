@@ -1653,6 +1653,7 @@ dependencies = [
  "sync-format",
  "tempfile",
  "thiserror 2.0.21",
+ "tracing",
  "ureq",
  "xxhash-rust",
  "zstd",

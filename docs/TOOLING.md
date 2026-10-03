@@ -24,7 +24,7 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
   oracle first. A "patch was not used" warning from cargo means one of the five is unpatched.
 - **git** is a process, not a library: `ls-tree`, `cat-file --batch`, `fast-import`, `push`.
 - **`ureq`** for downloads from Riot's CDN: blocking with no async runtime, which suits a tool whose
-  parallelism is rayon's.
+  parallelism is rayon's. It has no `multipart/byteranges` reader; `sync-source` has its own.
 - **`fjall`** for the chunk cache: millions of frames in a few large files rather than a file each,
   keyed by hash scheme, uncompressed size and chunk id. Without its default `lz4` feature, since
   the frames are zstd already.
@@ -66,11 +66,11 @@ and `cargo test --workspace --locked`.
 - **Inline** for a small private helper.
 - **`tests/`** for anything with fixtures or several steps. Fixtures are built in the test (a WAD,
   a bin, a bank written by the test) or recorded small and committed.
-- **No network.** The CDN source is tested against a local HTTP server the test runs, serving
-  bundles the test writes. Range requests are to be tested against recorded responses replayed by
-  such a server with range support: a handful of real range requests per chunk-hash scheme; a chunk found
-  in two bundles with different compressed sizes, both decompressing to the same verified bytes;
-  a multi-range request past the span cap, answered with the whole bundle.
+- **No network.** The CDN source is tested against a local HTTP server the test runs. It replays
+  answers recorded from Riot's CDN (`sync-source/tests/fixtures/`: a two-span `multipart/byteranges`
+  answer and a single-range one, three chunks of a 16.19 bundle), and builds answers in their shape
+  from a bundle the test writes: more than 128 spans, a whole bundle, a part that lacks a chunk or
+  holds another's bytes, a 404, a manifest.
 - **Writers** are tested against files from the published history: a sample of entries per kind,
   each rendered from its bytes and compared with the blob the history holds. The game's bytes are
   not committed, so these tests (`sync-format/tests/history.rs`) are ignored by default and run on

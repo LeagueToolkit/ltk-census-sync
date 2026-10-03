@@ -60,32 +60,40 @@ the compressed sizes before it. A downloader keeps that layout for the run; it d
 bundles of this manifest and no other.
 
 **Ranges, not bundles.** Changed entries are scattered, so the chunks a run needs are a few hundred
-kilobytes here and there across many bundles. The wanted chunks of one bundle go in one request as
-a multi-range `Range` header, and the CDN answers `206 multipart/byteranges`. Past about 258 spans
-it ignores the header and sends the whole bundle, which is not an error, so requests carry at most
-128 spans and the response's shape is checked.
+kilobytes here and there across many bundles, about a tenth of the bundles' bytes
+([RUNS.md](RUNS.md)). The wanted chunks of one bundle go in one request as a multi-range `Range`
+header, chunks that lie end to end in one span, at most 128 spans a request. The CDN answers `206`
+with a `multipart/byteranges` body, or for one span a `206` with a `Content-Range` header. Past
+about 258 spans it has answered with the whole bundle, a `200`, which is not an error; one edge
+answered 1,000 spans with parts ([RUNS.md](RUNS.md)). An answer is read by its shape, and each part
+by the length its `Content-Range` gives. An answer has left out a part it was asked for
+([RUNS.md](RUNS.md)), so the chunks an answer lacks are asked for again, three times at most before
+the run stops.
 
 ## Chunk sources
 
 A chunk is asked for **by its id, its hash and its uncompressed size**, and each source finds it
-its own way and checks all three. The sources
-are asked in order, and a chunk comes from the first that holds it with bytes that check:
+its own way and checks all three. The sources are asked in order, and a chunk comes from the first
+that holds it with bytes that check:
 
-- **The cache**: chunks already fetched, on local disk. Checked first; what the CDN returns is
-  written back, so a chunk is downloaded once. Whether it keeps chunks by id or whole bundles is
-  open ([ROADMAP.md](ROADMAP.md)).
-- **A mirror**: Riot's bundles kept whole at their CDN paths,
+- **A mirror**, when one is given: Riot's bundles kept whole at their CDN paths,
   `channels/public/bundles/<BUNDLE ID>.bundle` under one directory, read by the layout of the
   manifest being read, as from the CDN. The directory can be served over HTTP as a mirror of the
-  CDN.
-- **The CDN**, over https. For a chunk the sources before it lack or hold wrong, its whole bundle
-  is downloaded into the mirror, once, after its footer is checked to name it, and the chunk is
-  read from there. Ranges of a bundle, by the requests below, are for a run without a mirror.
+  CDN. A run reads it and never writes it.
 - **A local merged bundle**, the form an archive of past builds keeps (rman's one bundle per part,
   with its own table from chunk id to location). Read by chunk id and its own table only, never
   with a manifest's offsets, which describe another encoding. The archive is not trusted more than
   the CDN: it holds at least one chunk's bytes under another chunk's id ([RUNS.md](RUNS.md)), and
   every chunk it gives is checked like any other.
+- **The CDN**, over https, read through **the chunk cache**: one fjall database on local disk that
+  keeps each frame the CDN gave under the three things its chunk is: the chunking parameter version
+  of its hash, its uncompressed size and its id (chosen 2026-10-03). A chunk the cache holds with a
+  frame that checks comes from the cache; any other is fetched by range, checked, and kept. So a
+  chunk is downloaded once, and a frame is never handed out for a chunk of another scheme or size
+  that shares its id. A frame that does not check is fetched again and replaced.
+
+**Manifests** come from the manifest host once, are checked to hash to the id asked for, and are
+kept as files named by id.
 
 ## Files and ranges
 

@@ -28,7 +28,7 @@ pub struct ChunkingParams {
 }
 
 /// Where a chunk is in this manifest's bundles.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BundleChunk {
     pub bundle: u64,
     /// The sum of the compressed sizes of the chunks before it in its bundle.
@@ -38,7 +38,7 @@ pub struct BundleChunk {
 }
 
 /// One chunk of a file: its id, the hash its id is under, and where it is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkRef {
     pub id: u64,
     pub hash: ChunkHash,

@@ -12,7 +12,7 @@ use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
 use sync_history::{append, build_facts, Appended, Git};
-use sync_source::{BundleMirror, Cdn, ChunkRef, ChunkSource, Layers, Manifest, MergedBundle};
+use sync_source::{BundleMirror, Cdn, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, MergedBundle};
 
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
@@ -49,13 +49,17 @@ struct Sources {
     /// Whole bundles at their CDN paths under this directory, read before the archive.
     #[arg(long, env = "CENSUS_SYNC_MIRROR")]
     mirror: Option<Utf8PathBuf>,
-    /// For a chunk the mirror and the archive lack or hold wrong, download its whole bundle from
-    /// the CDN into the mirror.
-    #[arg(long, requires = "mirror")]
+    /// For a chunk the mirror and the archive lack or hold wrong, fetch it by range from the CDN
+    /// through the chunk cache.
+    #[arg(long)]
     cdn: bool,
-    /// The CDN's host: Riot's, or a mirror served over HTTP.
-    #[arg(long, default_value = sync_source::BUNDLE_HOST)]
-    cdn_host: String,
+    /// The chunk cache: the frames downloaded from the CDN.
+    #[arg(long, env = "CENSUS_SYNC_CACHE", default_value = "data/chunks")]
+    cache: Utf8PathBuf,
+    /// One host serving bundles at Riot's paths, such as a mirror served over HTTP, in place of
+    /// Riot's CDN.
+    #[arg(long)]
+    cdn_host: Option<String>,
 }
 
 #[derive(Args)]
@@ -113,7 +117,7 @@ struct VerifyArgs {
 }
 
 /// The chunk sources of a run, asked in order: a mirror when one is given, the archive's merged
-/// bundle, and the CDN filling the mirror when asked for.
+/// bundle, and the CDN through the chunk cache when asked for.
 struct Archive {
     root: Utf8PathBuf,
     bundle: MergedBundle,
@@ -127,7 +131,17 @@ impl Archive {
         let bundle = MergedBundle::open(&sources.archive.join("lol.bundle")).context("opening the merged bundle")?;
         tracing::info!("{} chunks in the merged bundle ({:.1}s)", bundle.len(), started.elapsed().as_secs_f64());
         let mirror = sources.mirror.as_deref().map(BundleMirror::new);
-        let cdn = sources.mirror.as_deref().filter(|_| sources.cdn).map(|root| Cdn::new(&sources.cdn_host, root));
+        let cdn = match sources.cdn {
+            true => {
+                let cache = ChunkCache::open(&sources.cache).with_context(|| format!("opening the chunk cache {}", sources.cache))?;
+                let cdn = Cdn::new(cache);
+                Some(match &sources.cdn_host {
+                    Some(host) => cdn.with_host(host),
+                    None => cdn,
+                })
+            }
+            false => None,
+        };
         Ok(Self { root: sources.archive.clone(), bundle, mirror, cdn })
     }
 
@@ -147,11 +161,16 @@ impl Archive {
         }
         Layers::new(layers)
     }
+
+    fn downloaded(&self) -> Downloaded {
+        self.cdn.as_ref().map(Cdn::downloaded).unwrap_or_default()
+    }
 }
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        // fjall logs each flush and compaction of the chunk cache at info.
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,fjall=warn,lsm_tree=warn".into()))
         .with_writer(std::io::stderr)
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
@@ -193,7 +212,7 @@ fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let archive = Archive::open(&args.sources)?;
     let started = Instant::now();
     let appended = append(&git, &args.branch, &facts, &archive.manifest(manifest)?, &archive.source(), pool)?;
-    log(&facts, &appended, started);
+    log(&facts, &appended, started, Downloaded::default(), archive.downloaded());
     Ok(())
 }
 
@@ -218,7 +237,7 @@ fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let started = Instant::now();
     let (mut trees, mut commits, mut failed) = (0, 0, Vec::new());
     for (i, expected) in published.iter().enumerate() {
-        let build = Instant::now();
+        let (build, before) = (Instant::now(), archive.downloaded());
         let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
         // Onto the published parent, so one build that differs does not hide the ones after it.
         git.reset_ref(&branch, &git.rev_parse(&format!("{expected}^"))?)?;
@@ -230,7 +249,7 @@ fn run_oracle(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
                 continue;
             }
         };
-        log(&facts, &appended, build);
+        log(&facts, &appended, build, before, archive.downloaded());
         let tree = git.rev_parse(&format!("{expected}^{{tree}}"))?;
         if appended.tree != tree {
             let diff = git.run(&["diff-tree", "-r", "--name-status", expected, &appended.commit])?;
@@ -265,10 +284,10 @@ fn run_rebuild(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
     let started = Instant::now();
     let mut rebuilt = Vec::with_capacity(published.len());
     for (i, expected) in published.iter().enumerate() {
-        let build = Instant::now();
+        let (build, before) = (Instant::now(), archive.downloaded());
         let facts = build_facts(&git.run(&["cat-file", "blob", &format!("{expected}:build.yaml")])?)?;
         let appended = append(&git, &args.branch, &facts, &archive.manifest(facts.manifest)?, &source, pool)?;
-        log(&facts, &appended, build);
+        log(&facts, &appended, build, before, archive.downloaded());
         let differs = git.run(&["diff-tree", "-r", "--name-only", expected, &appended.commit])?.lines().count();
         match differs {
             0 if appended.commit == *expected => tracing::info!("{}/{} {}: the published commit", i + 1, published.len(), facts.version),
@@ -347,9 +366,9 @@ fn run_verify(args: &VerifyArgs, pool: &rayon::ThreadPool) -> Result<()> {
     Ok(())
 }
 
-fn log(facts: &BuildFacts, a: &Appended, started: Instant) {
+fn log(facts: &BuildFacts, a: &Appended, started: Instant, before: Downloaded, after: Downloaded) {
     tracing::info!(
-        "{} {:016x}: {} of {} WADs changed, {} entries read, {} files written, {} removed{} -> commit {} tree {} ({:.1}s)",
+        "{} {:016x}: {} of {} WADs changed, {} entries read, {} files written, {} removed{}{} -> commit {} tree {} ({:.1}s)",
         facts.version,
         facts.manifest,
         a.changed,
@@ -361,6 +380,10 @@ fn log(facts: &BuildFacts, a: &Appended, started: Instant) {
             format!(" ({} bin objects unrenderable, {} under a repeated entry hash)", a.unrenderable, a.repeated)
         } else {
             String::new()
+        },
+        match after.requests - before.requests {
+            0 => String::new(),
+            n => format!(", {:.1} MB downloaded in {n} requests", (after.bytes - before.bytes) as f64 / 1e6),
         },
         &a.commit[..12],
         &a.tree[..12],

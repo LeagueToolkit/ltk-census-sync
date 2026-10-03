@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.png binary
+# Answers recorded from Riot's CDN, byte for byte: HTTP line ends are CRLF.
+*.http binary
