@@ -35,6 +35,23 @@ fn a_file_reads_across_its_chunks_and_seeks_anywhere() {
 }
 
 #[test]
+fn a_preload_fetches_its_ranges_chunks_in_one_request_and_reads_inside_them_fetch_none() {
+    let bytes = text(1000);
+    let (source, chunks) = file_of(&bytes, 100);
+    let mut file = FileReader::new(&source, chunks);
+    file.preload(&[(150, 100), (720, 10), (300, 0)]).unwrap();
+    assert_eq!(*source.asked.lock().unwrap(), [3]);
+    assert_eq!(file.read_range(150, 100).unwrap(), &bytes[150..250]);
+    assert_eq!(file.read_range(700, 100).unwrap(), &bytes[700..800]);
+    assert_eq!(*source.asked.lock().unwrap(), [3]);
+    // A read past them fetches the chunk it lacks, and holds its own chunks only.
+    assert_eq!(file.read_range(250, 100).unwrap(), &bytes[250..350]);
+    assert_eq!(file.read_range(710, 1).unwrap(), &bytes[710..711]);
+    assert_eq!(*source.asked.lock().unwrap(), [3, 1, 1]);
+    assert!(matches!(file.preload(&[(990, 11)]), Err(Error::Range { offset: 990, len: 11, size: 1000 })));
+}
+
+#[test]
 fn a_chunk_that_does_not_hash_to_its_id_is_refused() {
     let bytes = text(200);
     let (mut source, chunks) = file_of(&bytes, 100);

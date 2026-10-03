@@ -1,17 +1,20 @@
 //! Chunks the tests make: bytes cut into chunks, with their frames.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use sync_source::{open_frame, BundleChunk, ChunkHash, ChunkRef, ChunkSource, Error};
 
-/// Frames by chunk id, in memory.
+/// Frames by chunk id, in memory, recording how many chunks each request asks for.
 #[derive(Default)]
 pub struct MemorySource {
     pub frames: HashMap<u64, Vec<u8>>,
+    pub asked: Mutex<Vec<usize>>,
 }
 
 impl ChunkSource for MemorySource {
     fn chunks(&self, wanted: &[ChunkRef]) -> Result<Vec<Vec<u8>>, Error> {
+        self.asked.lock().unwrap().push(wanted.len());
         let mut dec = zstd::bulk::Decompressor::new()?;
         wanted.iter().map(|c| open_frame(c, self.frames.get(&c.id).ok_or(Error::MissingChunk(c.id))?, &mut dec)).collect()
     }
@@ -34,5 +37,5 @@ pub fn chunks_of(bytes: &[u8], size: usize) -> Vec<(ChunkRef, Vec<u8>)> {
 pub fn file_of(bytes: &[u8], size: usize) -> (MemorySource, Vec<ChunkRef>) {
     let chunks = chunks_of(bytes, size);
     let refs = chunks.iter().map(|(c, _)| *c).collect();
-    (MemorySource { frames: chunks.into_iter().map(|(c, f)| (c.id, f)).collect() }, refs)
+    (MemorySource { frames: chunks.into_iter().map(|(c, f)| (c.id, f)).collect(), ..Default::default() }, refs)
 }

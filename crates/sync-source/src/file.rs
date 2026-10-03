@@ -1,7 +1,11 @@
 //! A manifest file read as `Read + Seek` over its chunks (`docs/SOURCES.md`, "Files and ranges"):
-//! a seek costs nothing, and a read fetches the chunks it overlaps, in one request to the source.
+//! a seek costs nothing, and a read fetches the chunks it overlaps that are not held, in one
+//! request to the source. A caller that knows the ranges it will read preloads them, so their
+//! chunks come in one request rather than one a read.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::ops::Range;
 
 use crate::chunk::ChunkSource;
 use crate::rman::ChunkRef;
@@ -14,9 +18,9 @@ pub struct FileReader<'a, S: ChunkSource + ?Sized> {
     /// Where each chunk starts; the last value is the file's size.
     starts: Vec<u64>,
     pos: u64,
-    /// The chunks of the last read, by index: a WAD's entries lie in table order, and one chunk
-    /// often ends one entry and starts the next.
-    held: Vec<(usize, Vec<u8>)>,
+    /// The chunks of the last preload or of the last read that needed one not held, by index: a
+    /// WAD's entries lie in table order, and one chunk often ends one entry and starts the next.
+    held: BTreeMap<usize, Vec<u8>>,
 }
 
 impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
@@ -27,7 +31,7 @@ impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
         for chunk in &chunks {
             starts.push(starts[starts.len() - 1] + u64::from(chunk.place.uncompressed_size));
         }
-        Self { source, chunks, starts, pos: 0, held: Vec::new() }
+        Self { source, chunks, starts, pos: 0, held: BTreeMap::new() }
     }
 
     /// The file's size.
@@ -37,16 +41,13 @@ impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
 
     /// The bytes at `[offset, offset + len)`.
     pub fn read_range(&mut self, offset: u64, len: u64) -> Result<Vec<u8>, Error> {
-        let size = self.size();
-        let end = offset.checked_add(len).filter(|&end| end <= size).ok_or(Error::Range { offset, len, size })?;
         let mut out = Vec::with_capacity(len as usize);
-        if len == 0 {
-            return Ok(out);
+        let Some(indices) = self.indices(offset, len)? else { return Ok(out) };
+        if !indices.clone().all(|i| self.held.contains_key(&i)) {
+            self.hold(std::slice::from_ref(&indices))?;
         }
-        let first = self.starts.partition_point(|&s| s <= offset) - 1;
-        let last = self.starts.partition_point(|&s| s < end);
-        self.hold(first..last)?;
-        for (index, data) in &self.held {
+        let end = offset + len;
+        for (index, data) in self.held.range(indices) {
             let start = self.starts[*index];
             let from = offset.saturating_sub(start) as usize;
             let to = ((end - start) as usize).min(data.len());
@@ -55,21 +56,38 @@ impl<'a, S: ChunkSource + ?Sized> FileReader<'a, S> {
         Ok(out)
     }
 
-    /// Makes `held` the chunks `range`, fetching the ones not held yet in one request.
-    fn hold(&mut self, range: std::ops::Range<usize>) -> Result<(), Error> {
+    /// Holds the chunks that `ranges`, each `(offset, len)`, overlap, and no others: the ones not
+    /// held yet in one request. Reads inside the ranges then fetch nothing.
+    pub fn preload(&mut self, ranges: &[(u64, u64)]) -> Result<(), Error> {
+        let mut spans = Vec::with_capacity(ranges.len());
+        for &(offset, len) in ranges {
+            spans.extend(self.indices(offset, len)?);
+        }
+        self.hold(&spans)
+    }
+
+    /// The chunks `[offset, offset + len)` overlaps, by index; none for an empty range.
+    fn indices(&self, offset: u64, len: u64) -> Result<Option<Range<usize>>, Error> {
+        let size = self.size();
+        let end = offset.checked_add(len).filter(|&end| end <= size).ok_or(Error::Range { offset, len, size })?;
+        if len == 0 {
+            return Ok(None);
+        }
+        let first = self.starts.partition_point(|&s| s <= offset) - 1;
+        let last = self.starts.partition_point(|&s| s < end);
+        Ok(Some(first..last))
+    }
+
+    /// Makes `held` the chunks of `spans`, fetching the ones not held yet in one request.
+    fn hold(&mut self, spans: &[Range<usize>]) -> Result<(), Error> {
+        let wanted: BTreeSet<usize> = spans.iter().flat_map(Range::clone).collect();
         let mut previous = std::mem::take(&mut self.held);
-        let missing: Vec<usize> = range.clone().filter(|i| !previous.iter().any(|(j, _)| j == i)).collect();
-        let wanted: Vec<ChunkRef> = missing.iter().map(|&i| self.chunks[i]).collect();
-        let mut fetched: Vec<(usize, Vec<u8>)> = missing.iter().copied().zip(self.source.chunks(&wanted)?).collect();
-        for index in range {
-            let data = match previous.iter().position(|(j, _)| *j == index) {
-                Some(at) => previous.swap_remove(at).1,
-                None => {
-                    let at = fetched.iter().position(|(j, _)| *j == index).expect("a missing chunk was fetched");
-                    fetched.swap_remove(at).1
-                }
-            };
-            self.held.push((index, data));
+        let missing: Vec<usize> = wanted.iter().copied().filter(|i| !previous.contains_key(i)).collect();
+        let refs: Vec<ChunkRef> = missing.iter().map(|&i| self.chunks[i]).collect();
+        let mut fetched: BTreeMap<usize, Vec<u8>> = missing.into_iter().zip(self.source.chunks(&refs)?).collect();
+        for index in wanted {
+            let data = previous.remove(&index).or_else(|| fetched.remove(&index)).expect("a chunk not held was fetched");
+            self.held.insert(index, data);
         }
         Ok(())
     }
