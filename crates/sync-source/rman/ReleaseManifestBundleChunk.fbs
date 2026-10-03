@@ -1,0 +1,12 @@
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Slot order is (ID, CompressedSize, UncompressedSize) - note the compressed size comes
+// first, which is the opposite of the on-disk bundle TOC entry
+// ({ u64 chunkId, u32 uncompressed, u32 compressed }). Verified by range-requesting chunks
+// with the cumulative compressed offsets and decompressing them.
+table ReleaseManifestBundleChunk
+{
+    ID: ulong;
+    CompressedSize: uint;
+    UncompressedSize: uint;
+}

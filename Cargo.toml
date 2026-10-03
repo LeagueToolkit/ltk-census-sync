@@ -55,7 +55,7 @@ rayon = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
-# The sparse file a CDN read materialises into; scratch repositories in tests.
+# Scratch directories and repositories in tests.
 tempfile = "3"
 # The checks before a push load every changed YAML file into structs that reject unknown fields.
 serde = { version = "1", features = ["derive"] }

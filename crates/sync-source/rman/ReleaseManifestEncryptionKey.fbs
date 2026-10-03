@@ -1,0 +1,12 @@
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// From RG::PatchManifestReader::LoadEncryptionKeys (RiotClientFoundation.dll):
+// the ID is read as u16 and must be non-zero ("Invalid key header ID {}"), and field 1 is
+// dereferenced as a vector whose length must be non-zero ("Empty key {}").
+// ReleaseManifestFile.KeyID references this ID. Verified on valorant-win-01.10, which
+// carries one key: ID 1 with 32 bytes of data, referenced by 353 of its 786 files.
+table ReleaseManifestEncryptionKey
+{
+    ID: ushort;
+    Key: [ubyte];
+}

@@ -1,0 +1,65 @@
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Body slots 6..9: id -> entry indexes. Reversed from libRiotClientFoundation.dylib
+// (sub_23CDE0 query, sub_761E00 bit unpack, sub_4824F0 key hash) and verified against a
+// current game manifest: every bundle (2091), file (4750), directory (21) and chunk
+// (573890) id resolves, ~1.06 probes on average.
+//
+// They are an acceleration structure only - when a slot is absent the loader builds an
+// equivalent sorted index itself, so a manifest written without them still loads.
+//
+// Query for key `id`:
+//   p      = id % (16 * len(Buckets));  bucket = p >> 4;  slot = p & 15
+//   start  = Buckets[bucket].Base + Buckets[bucket].SlotOffsets[slot]
+//   end    = same for p+1, or Entries.Count when p+1 runs past the last slot
+//   h      = keyhash(id as 8 LE bytes, seed = Buckets[bucket].SlotSeeds[slot])
+//   probe i = 0..(end-start): index = Entries[start + (h + i) % (end - start)]
+//             until entity[index].ID == id
+
+struct ReleaseManifestLookupBucket
+{
+    Base: uint;                 // start index into Entries for this bucket
+    SlotOffsets: [ubyte:16];    // per-slot offset from Base (prefix sums within the bucket)
+    SlotSeeds: [ubyte:16];      // per-slot seed for the key hash
+}
+
+table ReleaseManifestPackedIndexes
+{
+    Count: uint;                // number of indexes
+    BitWidth: ubyte;            // bits per index, MSB-first (5 for 21 dirs, 20 for 573890 chunks)
+    Data: [ubyte];
+}
+
+table ReleaseManifestLookup
+{
+    Buckets: [ReleaseManifestLookupBucket];
+    Entries: ReleaseManifestPackedIndexes;
+}
+
+// Body slot 6 wraps the chunk lookup, because chunks are not a top-level vector: they live
+// inside bundles, so the manifest also carries a flat deduplicated chunk vector for the
+// indexes to point at, plus the reverse chunk -> bundle mapping.
+table ReleaseManifestChunkLookup
+{
+    Lookup: ReleaseManifestLookup;          // chunk id -> index into Chunks below
+    BundleIndex: ReleaseManifestChunkBundleIndex;
+    Chunks: [ReleaseManifestBundleChunk];   // flat, deduplicated, in bundle order
+}
+
+// chunk index -> bundle index. Chunks are laid out grouped by bundle, so the mapping is a
+// monotone step function, stored as a rank structure over blocks of 56 chunks:
+//
+//   bundle(i) = BlockBundle[i / 56]
+//             + popcount(Masks[BlockMask[i / 56]] >> (55 - i % 56))
+//
+// BlockBundle and BlockMask have ceil(chunks / 56) entries each; Masks holds the distinct
+// 56-bit transition masks (bit k set = chunk k of the block starts a new bundle, MSB-first)
+// and stays tiny - 38..79 entries across the manifests checked - because every block
+// without a transition shares the all-zero mask. Verified exact on 4 manifests
+// (4764 / 91516 / 569131 / 585888 chunks).
+table ReleaseManifestChunkBundleIndex
+{
+    BlockBundle: ReleaseManifestPackedIndexes;   // bundle index each block starts from
+    BlockMask: ReleaseManifestPackedIndexes;     // index into Masks per block
+    Masks: ReleaseManifestPackedIndexes;         // 56-bit transition masks
+}

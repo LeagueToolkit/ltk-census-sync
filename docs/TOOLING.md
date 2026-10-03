@@ -35,7 +35,7 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
 - **`serde` and `serde_yaml_ng`** for the checks before a push only: each changed YAML file loads
   into structs that reject unknown fields. Writing never goes through serde; the writers produce
   the exact text of [FORMAT.md](FORMAT.md) themselves.
-- **`tempfile`** for the sparse file a CDN read fills and for scratch repositories in tests;
+- **`tempfile`** for scratch directories and repositories in tests;
   **`pretty_assertions`** in tests, so a rendered file that differs from the history's blob shows
   as a line diff.
 - `Cargo.lock` is committed: this is a binary, and a run must be reproducible from a checkout.
@@ -78,6 +78,11 @@ and `cargo test --workspace --locked`.
   `entries.txt`, one `<commit> <path of the entry's own file>` per line. The same tests render
   every commit's `build.yaml`, message and time, and every `_wad.yaml` of the tip, which need no
   bytes.
+- **Sources** are tested against an archive of past builds the same way
+  (`sync-source/tests/archive.rs`, `CENSUS_SYNC_ARCHIVE` and `CENSUS_SYNC_HISTORY`, and
+  `CENSUS_SYNC_COMMIT` for a build other than the tip): every WAD of the build read from the
+  manifest and the merged bundle renders the published `_wad.yaml`, and every entry of a few WADs
+  is read and renders its published files.
 - **The kind audit.** The oracle reads only the entries that changed in its range, so a change to
   `kind_of` or to `ltk_file` also runs the writer tests over every tip entry of a kind that rests on
   a guess or is rare (`inibin`, `lightgrid`, `tga`, `png`, `stringtable`) and every entry with no

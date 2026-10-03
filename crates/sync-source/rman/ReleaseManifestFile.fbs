@@ -1,0 +1,54 @@
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Slot widths below are confirmed two ways: from the read widths in LeagueClient.exe 13.6
+// sub_5D62E0 (the file-table validator), and from the packed field offsets in the vtables of
+// four real manifests (lcu 10.11 / 13.6 and two current game manifests, ~10k files total).
+table ReleaseManifestFile
+{
+    ID: ulong;                    // 0
+
+    // Directory this file lives in; walk DirectoryID -> ParentID to build the path.
+    // (was named ParentID)
+    DirectoryID: ulong;           // 1
+
+    // Uncompressed size; the client rejects a file whose chunk sizes don't sum to it
+    // ("Inconsistent file chunk header sizes for file {fileId@hex}").
+    Size: ulong;                  // 2
+
+    Name: string;                 // 3
+
+    // Bitmask over ReleaseManifestLanguage/Tag entries: bit (tagId - 1) selects a tag.
+    // 13.6 validates every set bit against the tag table and errors with
+    // "Invalid tag {tagId} referenced by file {fileId@hex}", so these are tags in general,
+    // locales being the ones actually used. (was named LanguageFlags)
+    TagBitmask: ulong;            // 4
+
+    // Never present in any observed manifest, AND never read by the live reader:
+    // RG::PatchManifestReader::LoadFiles goes 0,1,2,3,4 -> 7 -> 10,11 and skips these, in
+    // both the Windows and the mac build. No other loader touches a file table. Either dead
+    // legacy slots or mobile-platform (iOS/Android) bits that desktop never populates - see
+    // README.md. The declared type is a guess that has never been exercised.
+    Unknown5: ubyte;              // 5
+    Unknown6: ubyte;              // 6
+
+    ChunkIDs: [ulong];            // 7
+
+    // macOS-only packaging bit, always the byte 1, only on files inside a .app (5 files in
+    // the mac game manifest, 18 in the mac RCU one) - and never read by the client. It is
+    // not a property of the file: libdiscord_partner_sdk.dylib, libvivoxsdk.dylib and
+    // MainMenu.nib carry it in the game manifest and not in the RCU one. See README.md for
+    // what was ruled out.
+    Unknown8: ubyte;              // 8
+
+    Link: string;                 // 9  symlink target; used by the LCU manifests, unused by game ones
+
+    // Encryption key, read as u16: "Invalid key ID {id} referenced by file {fileId@hex}".
+    // Never present in the manifests looked at so far. (was Unknown10: byte)
+    KeyID: ushort;                // 10
+
+    // Read as u16 by the client, and stored as 2 bytes in the manifest - it was a byte here.
+    // "Invalid chunking parameter set ID {id} referenced by file {fileId@hex}".
+    ChunkingParametersID: ushort; // 11
+
+    Permissions: ubyte;           // 12
+}

@@ -1,0 +1,15 @@
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Officially this is the TAG table: RiotClientFoundation.dll exports
+// RG::PatchManifestReader::LoadTags, and validates "Invalid tag header ID {}",
+// "Duplicate tag ID {}", "Duplicate tag name {}", "Invalid tag name with embedded null {}".
+// ReleaseManifestFile.TagBitmask sets bit (ID - 1) per entry here; a file referencing an
+// unknown ID is rejected with "Invalid tag {} referenced by file {:016X}".
+// Every entry seen so far is a locale ("en_US", ...), which is where the old name came from.
+// The table name is kept for source compatibility - rename to ReleaseManifestTag if you
+// don't mind touching consumers.
+table ReleaseManifestLanguage
+{
+    ID: ubyte;      // 1-based; bit (ID - 1) of TagBitmask
+    Name: string;
+}

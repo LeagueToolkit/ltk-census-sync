@@ -1,0 +1,36 @@
+include "ReleaseManifestBundle.fbs";
+include "ReleaseManifestLanguage.fbs";
+include "ReleaseManifestFile.fbs";
+include "ReleaseManifestDirectory.fbs";
+include "ReleaseManifestEncryptionKey.fbs";
+include "ReleaseManifestChunkingParameter.fbs";
+include "ReleaseManifestLookup.fbs";
+
+attribute "fs_serializer";
+
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Slots 0..5 map to RG::PatchManifestReader::Load{Bundles,Tags,Files,Directories,
+// EncryptionKeys,ChunkingParameters} (RiotClientFoundation.dll, from
+// Libraries\RiotPatching\Manifest\PatchManifestReader.cpp).
+//
+// Slots 6..9 are id -> entry lookup tables, present in current game manifests only, and
+// now decoded - see ReleaseManifestLookup.fbs for the structure and the query. Verified
+// against a current manifest: all 2091 bundle, 4750 file, 21 directory and 573890 chunk
+// ids resolve. They are a pure acceleration structure: when a slot is absent the loader
+// builds and sorts an equivalent index itself, so a manifest written without them loads
+// fine. Writing valid ones requires constructing the perfect hash, so a writer that does
+// not is better off omitting all four.
+table ReleaseManifestBody(fs_serializer)
+{
+    Bundles: [ReleaseManifestBundle];
+    Languages: [ReleaseManifestLanguage];       // officially Tags - see that file
+    Files: [ReleaseManifestFile];
+    Directories: [ReleaseManifestDirectory];
+    EncryptionKeys: [ReleaseManifestEncryptionKey];
+    ChunkingParameters: [ReleaseManifestChunkingParameter];
+    ChunkLookup: ReleaseManifestChunkLookup;    // 6
+    BundleLookup: ReleaseManifestLookup;        // 7
+    FileLookup: ReleaseManifestLookup;          // 8
+    DirectoryLookup: ReleaseManifestLookup;     // 9
+}

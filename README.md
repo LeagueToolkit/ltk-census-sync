@@ -39,7 +39,8 @@ for builds and bytes, [docs/OPERATIONS.md](docs/OPERATIONS.md) for running it on
 ## Status
 
 Being written ([docs/ROADMAP.md](docs/ROADMAP.md)). The writers (`sync-format`) reproduce the
-published history; the manifest and chunk reader and the append itself are next.
+published history, and the manifest and chunk reader (`sync-source`) reads past builds from an
+archive; the append itself is next.
 
 ## Layout
 

@@ -1,0 +1,105 @@
+mod common;
+
+use std::io::{Read, Seek, SeekFrom};
+
+use camino::{Utf8Path, Utf8PathBuf};
+use common::{chunks_of, file_of};
+use sync_source::{ChunkSource, Error, FileReader, MergedBundle};
+use xxhash_rust::xxh64::xxh64;
+
+fn text(len: usize) -> Vec<u8> {
+    (0..len).map(|i| b"abcdefghijklmnopqrstuvwxyz"[i * 7 % 26]).collect()
+}
+
+#[test]
+fn a_file_reads_across_its_chunks_and_seeks_anywhere() {
+    let bytes = text(1000);
+    let (source, chunks) = file_of(&bytes, 64);
+    let mut file = FileReader::new(&source, chunks).unwrap();
+    assert_eq!(file.size(), 1000);
+    assert_eq!(file.read_range(60, 200).unwrap(), &bytes[60..260]);
+    assert_eq!(file.read_range(0, 1000).unwrap(), bytes);
+    assert_eq!(file.read_range(999, 1).unwrap(), &bytes[999..]);
+    assert!(file.read_range(0, 0).unwrap().is_empty());
+    assert!(matches!(file.read_range(990, 11), Err(Error::Range { offset: 990, len: 11, size: 1000 })));
+
+    file.seek(SeekFrom::End(-10)).unwrap();
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail).unwrap();
+    assert_eq!(tail, &bytes[990..]);
+    file.seek(SeekFrom::Start(100)).unwrap();
+    let mut some = [0u8; 30];
+    file.read_exact(&mut some).unwrap();
+    assert_eq!(some, bytes[100..130]);
+    assert!(file.seek(SeekFrom::Current(-200)).is_err());
+}
+
+#[test]
+fn a_chunk_that_does_not_hash_to_its_id_is_refused() {
+    let bytes = text(200);
+    let (mut source, chunks) = file_of(&bytes, 100);
+    let other = chunks_of(&[b'z'; 100], 100).remove(0).1;
+    source.frames.insert(chunks[1].id, other);
+    let mut file = FileReader::new(&source, chunks.clone()).unwrap();
+    assert_eq!(file.read_range(0, 100).unwrap(), &bytes[..100]);
+    assert!(matches!(file.read_range(50, 100), Err(Error::BadChunk { id, .. }) if id == chunks[1].id));
+
+    source.frames.remove(&chunks[0].id);
+    let mut file = FileReader::new(&source, chunks.clone()).unwrap();
+    assert!(matches!(file.read_range(0, 1), Err(Error::MissingChunk(id)) if id == chunks[0].id));
+}
+
+#[test]
+fn a_merged_bundle_reads_its_parts_by_their_own_tables() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+    let bytes = text(300);
+    let chunks = chunks_of(&bytes, 100);
+    let [(a, fa), (b, fb), (c, fc)] = [chunks[0].clone(), chunks[1].clone(), chunks[2].clone()];
+    let size = |r: &sync_source::ChunkRef| r.place.uncompressed_size;
+    write_part(&dir.join("t.bundle"), &[(a.id, size(&a), &fa), (b.id, size(&b), &fb)]);
+    // The second part holds c, and a again under a frame of other bytes: the first part's wins.
+    let wrong = zstd::bulk::compress(b"not a", 1).unwrap();
+    write_part(&dir.join("t.00001.bundle"), &[(c.id, size(&c), &fc), (a.id, 5, &wrong)]);
+
+    let bundle = MergedBundle::open(&dir.join("t.bundle")).unwrap();
+    assert_eq!(bundle.len(), 3);
+    assert_eq!(bundle.frames(&[c, a]).unwrap(), [fc, fa]);
+    let mut file = FileReader::new(&bundle, vec![a, b, c]).unwrap();
+    assert_eq!(file.read_range(0, 300).unwrap(), bytes);
+
+    let mut missing = a;
+    missing.id ^= 1;
+    assert!(matches!(bundle.frames(&[missing]), Err(Error::MissingChunk(_))));
+}
+
+#[test]
+fn a_part_whose_table_does_not_match_its_footer_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = Utf8PathBuf::from_path_buf(dir.path().join("bad.bundle")).unwrap();
+    let (chunk, frame) = chunks_of(b"x", 1).remove(0);
+    write_part(&path, &[(chunk.id, 1, &frame)]);
+    let mut bytes = fs_err::read(&path).unwrap();
+    let at = bytes.len() - 20;
+    bytes[at] ^= 1;
+    fs_err::write(&path, bytes).unwrap();
+    assert!(matches!(MergedBundle::open(&path), Err(Error::Bundle { message, .. }) if message.contains("hashes to")));
+    assert!(MergedBundle::open(&path.with_file_name("none.bundle")).is_err());
+}
+
+/// A merged bundle part holding these frames, in this order.
+fn write_part(path: &Utf8Path, frames: &[(u64, u32, &[u8])]) {
+    let (mut data, mut toc) = (Vec::new(), Vec::new());
+    for (id, uncompressed, frame) in frames {
+        toc.extend(id.to_le_bytes());
+        toc.extend(uncompressed.to_le_bytes());
+        toc.extend((frame.len() as u32).to_le_bytes());
+        data.extend(*frame);
+    }
+    data.extend(&toc);
+    data.extend(xxh64(&toc, 0).to_le_bytes());
+    data.extend((frames.len() as u32).to_le_bytes());
+    data.extend(0xFFFF_FFFFu32.to_le_bytes());
+    data.extend(b"RBUN");
+    fs_err::write(path, data).unwrap();
+}

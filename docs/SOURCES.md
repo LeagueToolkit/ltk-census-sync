@@ -33,12 +33,12 @@ https://lol.secure.dyn.riotcdn.net/channels/public/releases/{MANIFEST_ID:016X}.m
 A file is its chunks in order. A chunk is identified by the first eight bytes of a hash of its
 **uncompressed** bytes, the hash chosen per file by its chunking parameters' version:
 
-| version | hash |
-| --- | --- |
-| 1 | SHA-512 |
-| 2 | SHA-256 |
-| 3 | RITO_HKDF: PBKDF2-HMAC-SHA256 over the SHA-256, empty salt, 32 rounds |
-| 4 | BLAKE3 (from 16.x) |
+| version | hash | the game client's manifests |
+| --- | --- | --- |
+| 1 | SHA-512 | not seen |
+| 2 | SHA-256 | not seen |
+| 3 | RITO_HKDF: PBKDF2-HMAC-SHA256 over the SHA-256, empty salt, 32 rounds | 9.2 to 16.3 |
+| 4 | BLAKE3 | from 16.4.7461248 |
 
 Every chunk is checked after decompression: its hash under its file's scheme and the uncompressed
 size the manifest gives. Identity is that hash alone. The same chunk can be compressed differently
@@ -78,8 +78,9 @@ A chunk is asked for **by id**, and each source finds it its own way:
 ## Files and ranges
 
 A file is read as `Read + Seek` over its chunks: a seek costs nothing, and a read fetches the
-chunks it overlaps that are not there yet, into a sparse temporary file the size of the whole.
-A WAD's table of contents is at its front, so opening a WAD fetches its first chunks only; reading
+chunks it overlaps that the reader does not hold, in one request to the source, and holds them
+until the next read. A WAD's entries lie in table order and one chunk often ends one entry and
+starts the next, so reading them in order fetches each chunk once. A WAD's table of contents is at its front, so opening a WAD fetches its first chunks only; reading
 one entry fetches the chunks that cover it. The file id skips unchanged files, the table's
 checksums skip unchanged entries, and the chunk map skips everything neither asked for.
 

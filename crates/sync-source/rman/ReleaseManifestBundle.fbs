@@ -1,0 +1,12 @@
+include "ReleaseManifestBundleChunk.fbs";
+
+namespace LeagueToolkit.IO.ReleaseManifestFile;
+
+// Chunks are in bundle order: a chunk's offset inside the bundle is the sum of the
+// CompressedSize of every chunk before it. The bundle ID is derived from the chunk IDs -
+// see ../notes.md and ../../bundle_id.py.
+table ReleaseManifestBundle
+{
+    ID: ulong;
+    Chunks: [ReleaseManifestBundleChunk];
+}

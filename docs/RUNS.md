@@ -72,3 +72,18 @@ entry's bytes read from the archive of past builds (`sync-format/tests/history.r
 - **Found.** No entry of kind `link` and no joint parent written as an ordinal, at 16.19 or at the
   first patch of each season from 9 to 15. Both rules are in [FORMAT.md](FORMAT.md) and covered by
   tests built from synthetic bytes.
+
+## Reading builds from the archive (2026-10-03)
+
+`sync-source` against the published `history`, each build read from the archive of past builds:
+its manifest and the merged bundle (`sync-source/tests/archive.rs`).
+
+- **WADs.** At 9.2, 10.7, 10.8, 11.1, 12.1, 13.1, 14.1, 15.1, 15.24, 16.1, 16.5, 16.10 and 16.19
+  (from 3,273 WADs at 9.2 to 4,711 at 15.24), every `.wad.client` of the manifest is a WAD of the
+  commit, and its table read through the bundle renders the published `_wad.yaml`.
+- **Entries.** At each of the first ten and at 16.19, every entry of `Ahri.wad.client` and
+  `Ahri.en_US.wad.client` is read, its checksum is the published one, and its files are the
+  published files: from 709 entries and 1,014 files at 9.2 to 6,105 entries and 8,679 files at
+  16.19. 7 s a build at 9.2, 26 s at 16.19, in a debug build.
+- **Chunk hashes.** Every manifest checked uses one chunking version: 3 (RITO_HKDF) from 9.2 to the
+  last build of 16.3, 4 (BLAKE3) from 16.4.7461248, the first build of 16.4. None uses 1 or 2.
