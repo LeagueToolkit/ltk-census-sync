@@ -54,8 +54,8 @@ schema/<name>.schema.json                             a JSON Schema per kind of 
 build.yaml                                            this build: version, patch, manifest, source, date, realms
 files/<manifest path>/_wad.yaml                       one WAD: format version, the manifest's file id and tags
 files/<manifest path>/xx/<hash>.yaml                  one WAD entry: sha256, checksum, kind, and what its bytes
-                                                      say -- skeleton, mesh, texture, sound bank, or a bin's
-                                                      links and its objects' keys
+                                                      say -- skeleton, mesh, texture, clip, sound bank, or a
+                                                      bin's links and its objects' keys
 files/<manifest path>/xx/<hash>.bin/yy/<entry>.rito   one entry of a bin, as ritobin text (as C++ ritobin writes it)
 ```
 
@@ -68,7 +68,7 @@ files/<manifest path>/xx/<hash>.bin/yy/<entry>.rito   one entry of a bin, as rit
   hash's first byte. Its `.yaml` holds the SHA-256 of its bytes (the same anywhere means the same
   bytes: "did the game ever ship this file" is a search for it), the checksum the WAD's table holds
   for it, its kind by magic, and then what the bytes say under a key per kind: `skeleton`, `mesh`,
-  `texture`, `bank`, or a bin's `links` and `objects` (each object's class and the SHA-256 keys of
+  `texture`, `clip`, `bank`, or a bin's `links` and `objects` (each object's class and the SHA-256 keys of
   its binary bytes, which the ritobin text cannot give back).
 - **A bin** is a directory beside its entry's file, `<hash>.bin/`, one file per bin entry named for
   its entry hash, in the directory of the hash's first byte. Each is the ritobin text of a bin

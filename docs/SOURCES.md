@@ -121,7 +121,8 @@ WADs through `ltk_wad`; an entry's kind from its magic through `ltk_file`; bins 
 and printed through `ltk_ritobin`; meshes, skeletons and textures through `ltk_mesh`, `ltk_anim`
 and `ltk_texture`, `.dds` textures through `ddsfile`. Wwise banks (`bnk`, `wpk`), the inibin
 family and the `r3d2sklt` skeletons before the rig resource have no ltk reader and are read by
-`sync-format` itself.
+`sync-format` itself. A clip's joint list is read by `sync-format` at the offsets `ltk_anim`
+reads it from: `ltk_anim` keeps an uncompressed clip's joints in a map, which loses their order.
 
 An entry's kind is read from the whole entry, decompressed: an inibin has a one-byte magic and is
 told by its exact length, so the first chunk of an entry is not enough. An entry the WAD's table

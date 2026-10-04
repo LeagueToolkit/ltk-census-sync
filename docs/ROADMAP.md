@@ -48,6 +48,15 @@ workspace then depends on.
 
 ## Open
 
+- **Publishing the history with clips and bank objects.** The writers render an `anm` entry's
+  `clip` and a bank's `header` and `objects`, and the history written again with them passes the
+  oracle ([RUNS.md](RUNS.md)). The published `history` does not hold them until that branch
+  replaces it and its tags move, which the user does. An append onto the published `history` before
+  then writes the keys for the entries it reads only.
+- **Banks left unread by that rewrite.** A bank with wems and no events was not read again, so one
+  with a `HIRC` section and no events has no `header` or `objects` until its entry changes.
+- **The tags of 8.20 to 9.1.** About 200 WADs a build lack locale tags in `_wad.yaml`
+  ([RUNS.md](RUNS.md)); the fix changes those commits.
 - **The manifest list.** The community mirror is enough to start; asking Riot's patchline
   configuration directly removes the dependency on it.
 - **How much the chunk cache keeps.** A build's chunks are almost never read again by the next

@@ -3,7 +3,7 @@
 
 use pretty_assertions::assert_eq;
 use sha2::{Digest, Sha256};
-use sync_format::{bank_facts, entry_files, skeleton_facts, BankFacts, EntryFiles, Joint, MediaFacts, KIND_LINK};
+use sync_format::{bank_facts, clip_facts, entry_files, skeleton_facts, BankFacts, BankObject, EntryFiles, Joint, MediaFacts, KIND_LINK};
 
 const PATH_HASH: u64 = 0x22e2_cf78_5bae_ac7e;
 
@@ -172,6 +172,10 @@ fn events_and_media() -> Vec<u8> {
 fn a_bank_lists_its_wems_and_what_each_event_plays() {
     let bytes = events_and_media();
     let wem = |bytes: &[u8]| -> [u8; 8] { Sha256::digest(bytes)[..8].try_into().unwrap() };
+    let object = |id: u32, kind: u8, body: &str| {
+        let body = (0..body.len()).step_by(2).map(|i| u8::from_str_radix(&body[i..i + 2], 16).unwrap()).collect();
+        BankObject { id: Some(id), kind, body }
+    };
     assert_eq!(
         bank_facts(&bytes).unwrap(),
         BankFacts {
@@ -183,13 +187,29 @@ fn a_bank_lists_its_wems_and_what_each_event_plays() {
                 MediaFacts { id: 500, size: 12, hash: wem(b"RIFF....WAVE") },
             ],
             events: vec![(40, vec![500]), (41, vec![])],
+            header: Some(u32s(&[145, 0x0434_2ac6, 0, 0, 0])),
+            objects: vec![
+                object(10, 2, "0100040002f401000000000000800000000000efbe000014000000070707"),
+                object(20, 5, "01010000000000000000000000efbe000000000000"),
+                object(30, 3, "03041400000000"),
+                object(31, 3, "03011400000000"),
+                object(40, 4, "021e0000001f000000"),
+                object(41, 4, "011f000000"),
+            ],
         }
     );
     let entry = entry_files(PATH_HASH, None, "bnk", &bytes, false);
     let yaml = format!(
-        "sha256: \"{}\"\nkind: \"bnk\"\nbank:\n version: 145\n bankId: \"04342ac6\"\n media:\n  \"000001f4\":\n   size: 12\n   \
+        "sha256: \"{}\"\nkind: \"bnk\"\nbank:\n version: 145\n bankId: \"04342ac6\"\n \
+         header: \"91000000c62a3404000000000000000000000000\"\n media:\n  \"000001f4\":\n   size: 12\n   \
          hash: \"{}\"\n\n  \"00000258\":\n   size: 8\n   hash: \"{}\"\n\n events:\n  \"00000028\":\n   - \"000001f4\"\n\n  \
-         \"00000029\": []\n\n",
+         \"00000029\": []\n\n objects:\n  \
+         - id: \"0000000a\"\n    type: 2\n    body: \"0100040002f401000000000000800000000000efbe000014000000070707\"\n  \
+         - id: \"00000014\"\n    type: 5\n    body: \"01010000000000000000000000efbe000000000000\"\n  \
+         - id: \"0000001e\"\n    type: 3\n    body: \"03041400000000\"\n  \
+         - id: \"0000001f\"\n    type: 3\n    body: \"03011400000000\"\n  \
+         - id: \"00000028\"\n    type: 4\n    body: \"021e0000001f000000\"\n  \
+         - id: \"00000029\"\n    type: 4\n    body: \"011f000000\"\n",
         sha(&bytes),
         hex(&wem(b"RIFF....WAVE")),
         hex(&wem(b"....WAVE")),
@@ -243,5 +263,43 @@ fn a_joint_names_its_parent_unless_another_joint_shares_the_name() {
          parent: 3\n",
         sha(&bytes)
     );
+    assert_eq!(files(&entry), [("22/22e2cf785baeac7e.yaml", yaml.as_str())]);
+}
+
+/// A clip's header up to `len` bytes, its magic, its version and the u32 fields given by offset.
+fn clip(magic: &[u8; 8], version: u32, len: usize, fields: &[(usize, u32)]) -> Vec<u8> {
+    let mut bytes = vec![0u8; len];
+    bytes[..8].copy_from_slice(magic);
+    for &(at, value) in [(8, version)].iter().chain(fields) {
+        bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    bytes
+}
+
+#[test]
+fn a_clip_lists_its_joints_in_stored_order() {
+    // Compressed: two joints, their hashes at 128 + 12.
+    let mut compressed = clip(b"r3d2canm", 3, 140, &[(24, 2), (124, 128)]);
+    compressed.extend(u32s(&[0x0a1b_2c3d, 0x0000_0001]));
+    // Version 5: the hashes from 52 + 12 to the frames at 60 + 12.
+    let mut v5 = clip(b"r3d2anmd", 5, 64, &[(28, 2), (40, 52), (60, 60)]);
+    v5.extend(u32s(&[0x0a1b_2c3d, 0x0000_0001]));
+    // Version 4: two tracks, one frame at 52 + 12, a 12-byte record a track.
+    let mut v4 = clip(b"r3d2anmd", 4, 64, &[(28, 2), (32, 1), (60, 52)]);
+    v4.extend(u32s(&[0x0a1b_2c3d, 0, 0, 0x0000_0001, 0, 0]));
+    for bytes in [compressed, v5, v4] {
+        assert_eq!(clip_facts(&bytes).unwrap().joints, [0x0a1b_2c3d, 1]);
+        let entry = entry_files(PATH_HASH, None, "anm", &bytes, false);
+        let yaml = format!("sha256: \"{}\"\nkind: \"anm\"\nclip:\n joints:\n  - \"0a1b2c3d\"\n  - \"00000001\"\n", sha(&bytes));
+        assert_eq!(files(&entry), [("22/22e2cf785baeac7e.yaml", yaml.as_str())]);
+    }
+}
+
+#[test]
+fn a_clip_that_does_not_parse_has_no_section() {
+    let truncated = clip(b"r3d2canm", 3, 140, &[(24, 2), (124, 128)]);
+    let entry = entry_files(PATH_HASH, None, "anm", &truncated, false);
+    assert!(entry.error.is_some());
+    let yaml = format!("sha256: \"{}\"\nkind: \"anm\"\n", sha(&truncated));
     assert_eq!(files(&entry), [("22/22e2cf785baeac7e.yaml", yaml.as_str())]);
 }

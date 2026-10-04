@@ -264,3 +264,51 @@ published history was not checked.
 - **The file checks alone**, over every 20th file of the tip and every `build.yaml` and
   `_wad.yaml`: 74,449 files, 23,015 of them `.rito`, all pass, in 10 s on one thread.
 - **16.19.8217343**, appended onto a scratch branch, passes too.
+
+## What a bank's objects and a clip's joints cost (2026-10-04)
+
+- **One build.** Every bank with a `HIRC` section in an install of 16.19.8207193 with one locale:
+  4,478 banks (3,637 distinct), 790,996 objects, 35.8 MB of bodies, the longest 3,642 bytes. Their
+  own files are 8.9 MB without `header` and `objects` and 115.7 MB with them. No body holds audio.
+  Sounds and random containers are 75% of the body bytes; 705,337 of the bodies are distinct.
+- **The whole history**, each kind's own files alone in a repository of 755 commits, repacked with
+  `--window=250 --depth=50` at zlib 9: clips 47.76 MiB (64,903 files and 112.8 MB of text at
+  16.19), banks 281.28 MiB (18,695 files and 751.2 MB of text at 16.19; 8.23 GB of text over the
+  history). 14,930 of the banks with events at 16.19 are in locale WADs, 21 locales, and a voice
+  bank's bytes differ a locale.
+- **Found.** `pack-objects` fed object ids without their paths packed the banks to 1.29 GB: without
+  a path it does not put the versions of one file together.
+
+## The RADS builds as RMAN (2026-10-04)
+
+- **What.** The eleven builds of 8.20 to 9.1 written from the RADS archive as RMAN manifests and
+  bundles in Riot's form, laid out as the CDN, with no chunk cut or compressed again.
+- **Result.** 2,993,241 chunks in 1,602 bundles of about 16 MiB, 26.9 GB, 570 s; eleven manifests,
+  608 MB. Every chunk checked against its id: the archive's ids are RITO_HKDF, the hash of chunking
+  version 3. A build is 26 to 28 GB in 2,610 to 2,645 files.
+- **File ids.** The archive's id for a file is the `fileId` the history holds: equal for every WAD
+  of every build.
+- **Found.** A path several locale projects ship with the same chunks can have another file id in
+  each: 208 of the 306 shared paths at 8.20. The history holds such a WAD with one project's locale
+  as its only tag, so about 200 WADs a build lack tags in `_wad.yaml` (208 at 8.20, 196 at 9.1).
+
+## The history written again with clips and bank objects (2026-10-04)
+
+- **What.** Every commit of `history` written onto a branch of its own: the previous new commit
+  plus the commit's own diff, with each clip and each bank that is not an audio bank read again
+  from the build's bytes and rendered, and the first commit taking the entry schema. 8.20 to 9.1
+  read from the RADS builds as RMAN, 9.2 on from the archive of past builds.
+- **Result.** 755 commits, 733 s on 4 threads. Every entry read hashes to the SHA-256 the history
+  holds for it. At 16.19, 83,592 files differ from the published tree: 64,903 clips and 18,689
+  banks.
+- **Checked.** Every commit keeps its author, date and message. At 44 commits, each of the
+  1,921,291 files that differ is a clip's or a bank's own file whose text is the published text
+  once the added keys are removed.
+- **Entries with no section.** 55, in three WADs: 53 banks of `map21` (8.24 to 9.3, and 10.14 to
+  16.17) and `map12` (from 14.22), and two clips of `data2` (12.4 to 12.23). The 18 at 16.19 are
+  two `map12` banks of Wwise version 125 under nine paths each, and both went through a line-ending
+  conversion before they shipped: every `0A` byte follows a `0D` (30 in the events bank, 7,699 in
+  the audio bank), and with the 30 removed the events bank is its `BKHD` and `HIRC` exactly.
+- **The oracle on it.** The four builds of 16.18 and 16.19.8207193, each appended onto its new
+  parent from the chunk cache and the CDN: 5 of 5 trees and commits identical, 1,305.6 MB
+  downloaded for 16.19.8207193. `census-sync check` passes on the five.

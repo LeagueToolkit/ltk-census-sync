@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::bank::bank_facts;
 use crate::bin::bin_facts;
+use crate::clip::clip_facts;
 use crate::names::{entry_name, object_name};
 use crate::rig::{mesh_facts, skeleton_facts};
 use crate::texture::texture_facts;
@@ -41,6 +42,7 @@ pub fn entry_files(path_hash: u64, checksum: Option<u64>, kind: &str, bytes: &[u
             links = Some(bin.links);
             Some(Section::Objects(bin.objects))
         }),
+        "anm" => clip_facts(bytes).map(|c| Some(Section::Clip(c))),
         "bnk" | "wpk" => bank_facts(bytes).map(|b| Some(Section::Bank(b))),
         "skl" => skeleton_facts(bytes).map(|s| Some(Section::Skeleton(s))),
         "skn" => mesh_facts(bytes).map(|m| Some(Section::Mesh(m))),

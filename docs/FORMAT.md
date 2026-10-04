@@ -7,7 +7,9 @@ checks that against the published history.
 
 **Evolution** (decided 2026-10-02): adding an optional field or a family is still format 2, and a
 reader ignores what it does not know; changing or removing anything is format 3. `census.yaml`
-carries the format number, and a reader checks it before parsing.
+carries the format number, and a reader checks it before parsing. Added so far (decided 2026-10-04,
+for a reader that ports mods without a game install): an `anm` entry's `clip`, and a bank's
+`header` and `objects`. Every commit holds them, from the first.
 
 ## Branches, commits, tags
 
@@ -173,8 +175,8 @@ In this order:
 - `sha256`: of the entry's bytes, decompressed. The same anywhere means the same bytes.
 - `checksum`: the checksum the WAD's table holds for the entry, 16 hex; absent in a WAD without
   them. An append compares it to decide whether the entry changed.
-- `kind`: what the bytes are by their magic (`bin`, `tex`, `dds`, `skl`, `skn`, `bnk`, `wpk`,
-  `link`, ...); absent when unknown.
+- `kind`: what the bytes are by their magic (`bin`, `tex`, `dds`, `skl`, `skn`, `anm`, `bnk`,
+  `wpk`, `link`, ...); absent when unknown.
 - `links`: a bin's links (the other bins it depends on), sorted and deduplicated, `[]` for none;
   for a bin that splits only.
 - Then what the bytes say, under one key for the kind, when they parse. A section with nothing in
@@ -204,18 +206,41 @@ mesh:
     rounded: "72175e93b32a1d95"
 ```
 
+**`clip`** (`anm`): `joints`, the joints the clip animates, each the 32-bit hash the clip stores
+for it as 8 hex, in stored order, `[]` for none. Both clip forms hold the list: the compressed one
+and versions 4 and 5 of the uncompressed one as hashes, version 3 as joint names, which are hashed
+with ELF as the game hashes a joint's name. Only the list is read, so a clip whose frames would not
+parse still has it.
+
+```yaml
+clip:
+ joints:
+  - "0a1b2c3d"
+  - "1f2e3d4c"
+```
+
 **`texture`** (`tex`, `dds`): `format` (`bc1`, `bc3`, `bgra8`, ..., or the DDS one, `dxt1`,
 `dxt5`, ...), `width`, `height`, `mips`, and `top`, XXH3 of the top mip's stored bytes.
 
-**`bank`** (`bnk`, `wpk`): `version`; `bankId` when the bank has one; `media`, by wem id, each with
-its `size` and `hash` (the first eight bytes of the SHA-256 of the wem's bytes); and for an events
-bank `events`, by event id, each listing the wem ids its play actions reach through the bank's
-hierarchy (`[]` for none). Each media and event record ends with a blank line.
+**`bank`** (`bnk`, `wpk`): `version`; `bankId` when the bank has one; `header`; `media`, by wem
+id, each with its `size` and `hash` (the first eight bytes of the SHA-256 of the wem's bytes); for
+an events bank `events`, by event id, each listing the wem ids its play actions reach through the
+bank's hierarchy (`[]` for none); and `objects`. Each media and event record ends with a blank
+line.
+
+`header` and `objects` are what a bank with a `HIRC` section stores, kept as bytes so that a reader
+can write the bank again: `header` is the body of its `BKHD` section as hex, and `objects` is every
+`HIRC` object in stored order, each with its `id` (8 hex), its `type` (the type byte, a number) and
+its `body`, the object's bytes after its id, as hex. A `HIRC` object is a type byte, a 32-bit size
+and that many bytes, which start with the id; an object too short to hold an id has no `id`, and
+its `body` is all of its bytes. An object the bank repeats is listed each time. A body holds
+settings and ids, never audio. A bank with no `HIRC` section has neither key.
 
 ```yaml
 bank:
  version: 145
  bankId: "70529222"
+ header: "91000000222905703e5d701710000000fa00000000000000f07d3c6de0cedd54"
  media:
   "0001f14f":
    size: 8988
@@ -227,6 +252,13 @@ bank:
 
   "0e0f1011": []
 
+ objects:
+  - id: "0a0b0c0d"
+    type: 4
+    body: "01a1b2c3d4"
+  - id: "d4c3b2a1"
+    type: 3
+    body: "03040d0c0b0a00"
 ```
 
 **`objects`** (`bin`): every object the bin holds, by entry hash in unsigned order, whether or not

@@ -1,5 +1,6 @@
-//! A sound bank's facts (`docs/FORMAT.md`, "bank"): its wems, and the wems each event's play actions
-//! reach through the bank's hierarchy.
+//! A sound bank's facts (`docs/FORMAT.md`, "bank"): its wems, the wems each event's play actions
+//! reach through the bank's hierarchy, and for a bank with a hierarchy its header and every object
+//! as stored.
 //!
 //! League splits audio into a media bank (`*_audio.bnk` with `DIDX` and `DATA`, or a `.wpk`)
 //! holding the `.wem` files, and an events bank (`*_events.bnk`, `HIRC`) holding the flat object
@@ -15,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use sha2::{Digest, Sha256};
 
 use crate::read::u32_at;
-use crate::yaml::{BankFacts, MediaFacts};
+use crate::yaml::{BankFacts, BankObject, MediaFacts};
 use crate::Error;
 
 // HIRC object types.
@@ -57,6 +58,10 @@ struct Bank {
     bank_id: Option<u32>,
     objects: Vec<Object>,
     media: Vec<MediaFacts>,
+    /// The `BKHD` section's body, for a bank with a `HIRC` section.
+    header: Option<Vec<u8>>,
+    /// Every `HIRC` object as stored.
+    stored: Vec<BankObject>,
 }
 
 /// A bank's facts from its bytes. An object id or wem id the bank repeats keeps its first record,
@@ -86,6 +91,8 @@ pub fn bank_facts(bytes: &[u8]) -> Result<BankFacts, Error> {
         bank_id: bank.bank_id,
         media,
         events: events(&Hierarchy::new(objects)),
+        header: bank.header,
+        objects: bank.stored,
     })
 }
 
@@ -222,7 +229,7 @@ fn parse_bnk(bytes: &[u8]) -> Result<Bank, Error> {
     let mut didx: Vec<(u32, u32, u32)> = Vec::new();
     let mut data: Option<&[u8]> = None;
     let mut hirc: Option<&[u8]> = None;
-    let mut header = false;
+    let mut header: Option<&[u8]> = None;
     let mut pos = 0;
     while let (Some(tag), Some(len)) = (bytes.get(pos..pos + 4), u32_at(bytes, pos + 4)) {
         let body = bytes
@@ -232,7 +239,7 @@ fn parse_bnk(bytes: &[u8]) -> Result<Bank, Error> {
             b"BKHD" => {
                 bank.version = u32_at(body, 0).ok_or_else(|| Error::Bank("BKHD too short for a version".to_string()))?;
                 bank.bank_id = u32_at(body, 4);
-                header = true;
+                header = Some(body);
             }
             b"DIDX" => {
                 for entry in body.as_chunks::<12>().0 {
@@ -246,9 +253,9 @@ fn parse_bnk(bytes: &[u8]) -> Result<Bank, Error> {
         }
         pos += 8 + len as usize;
     }
-    if !header {
+    let Some(header) = header else {
         return Err(Error::Bank("no BKHD section".to_string()));
-    }
+    };
     for (id, offset, size) in didx {
         let wem = data.and_then(|d| d.get(offset as usize..(offset as usize).checked_add(size as usize)?));
         if let Some(wem) = wem {
@@ -257,6 +264,7 @@ fn parse_bnk(bytes: &[u8]) -> Result<Bank, Error> {
     }
     if let Some(section) = hirc {
         parse_hirc(section, &mut bank)?;
+        bank.header = Some(header.to_vec());
     }
     Ok(bank)
 }
@@ -275,6 +283,11 @@ fn parse_hirc(section: &[u8], bank: &mut Bank) -> Result<(), Error> {
         let size = cur.u32().ok_or_else(truncated)?;
         let body = cur.take(size as usize).ok_or_else(|| Error::Bank(format!("HIRC object {i} runs past the section")))?;
         bank.objects.push(read_object(kind, body, bank.version));
+        let (id, body) = match body.split_first_chunk::<4>() {
+            Some((id, rest)) => (Some(u32::from_le_bytes(*id)), rest),
+            None => (None, body),
+        };
+        bank.stored.push(BankObject { id, kind, body: body.to_vec() });
     }
     Ok(())
 }

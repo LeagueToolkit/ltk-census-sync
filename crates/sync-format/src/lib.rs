@@ -15,6 +15,7 @@
 mod bank;
 mod bin;
 mod check;
+mod clip;
 mod commit;
 mod entry;
 mod error;
@@ -30,6 +31,7 @@ mod yaml;
 pub use bank::bank_facts;
 pub use bin::{bin_facts, split_bin, BinFacts, BinSplit, ObjectSpan};
 pub use check::Census;
+pub use clip::clip_facts;
 pub use commit::{commit_message, commit_time, AUTHOR};
 pub use entry::{entry_files, EntryFiles};
 pub use error::Error;
@@ -40,6 +42,6 @@ pub use rig::{mesh_facts, skeleton_facts};
 pub use texts::{CENSUS_YAML, GITATTRIBUTES, MAIN_LICENSE, MAIN_README, SCHEMAS};
 pub use texture::texture_facts;
 pub use yaml::{
-    build_yaml, entry_yaml, wad_tags, wad_yaml, BankFacts, BuildFacts, EntryFacts, Joint, MediaFacts, MeshFacts,
-    ObjectKeys, Rads, Section, SkeletonFacts, SubmeshFacts, TextureFacts,
+    build_yaml, entry_yaml, wad_tags, wad_yaml, BankFacts, BankObject, BuildFacts, ClipFacts, EntryFacts, Joint, MediaFacts,
+    MeshFacts, ObjectKeys, Rads, Section, SkeletonFacts, SubmeshFacts, TextureFacts,
 };

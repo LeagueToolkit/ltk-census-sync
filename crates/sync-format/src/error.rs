@@ -10,6 +10,9 @@ pub enum Error {
     /// A sound bank that does not parse.
     #[error("bank: {0}")]
     Bank(String),
+    /// An animation clip that does not parse.
+    #[error("clip: {0}")]
+    Clip(String),
     /// A skeleton that does not parse.
     #[error("skeleton: {0}")]
     Skeleton(String),

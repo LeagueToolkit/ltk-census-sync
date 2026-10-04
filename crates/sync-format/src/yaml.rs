@@ -81,6 +81,15 @@ pub enum Section {
     Bank(BankFacts),
     /// A bin's objects, in any order.
     Objects(Vec<ObjectKeys>),
+    /// `clip`, of an `anm`.
+    Clip(ClipFacts),
+}
+
+/// An animation clip (`anm`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClipFacts {
+    /// The hash of each joint the clip animates, in stored order.
+    pub joints: Vec<u32>,
 }
 
 /// A skeleton (`skl`).
@@ -159,6 +168,21 @@ pub struct BankFacts {
     pub media: Vec<MediaFacts>,
     /// Each event's id and the wem ids its play actions reach, one per event id, in any order.
     pub events: Vec<(u32, Vec<u32>)>,
+    /// The `BKHD` section's body, for a bank with a `HIRC` section; none for any other.
+    pub header: Option<Vec<u8>>,
+    /// Every `HIRC` object, in stored order.
+    pub objects: Vec<BankObject>,
+}
+
+/// One object of a bank's hierarchy, as the bank stores it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BankObject {
+    /// The object's id; none for an object too short to hold one.
+    pub id: Option<u32>,
+    /// The object's type byte.
+    pub kind: u8,
+    /// The object's bytes after its id.
+    pub body: Vec<u8>,
 }
 
 /// One wem a bank holds.
@@ -244,6 +268,7 @@ pub fn entry_yaml(entry: &EntryFacts) -> String {
             Section::Texture(t) => ("texture", texture_body(t)),
             Section::Bank(b) => ("bank", bank_body(b)),
             Section::Objects(o) => ("objects", objects_body(o)),
+            Section::Clip(c) => ("clip", clip_body(c)),
         };
         // A section with nothing in it is not written: a bin with no objects has no `objects`.
         if !body.is_empty() {
@@ -256,6 +281,13 @@ pub fn entry_yaml(entry: &EntryFacts) -> String {
             }
         }
     }
+    text
+}
+
+fn clip_body(clip: &ClipFacts) -> String {
+    let joints: Vec<String> = clip.joints.iter().map(|j| format!("{j:08x}")).collect();
+    let mut text = String::new();
+    list(&mut text, "joints", joints.iter().map(String::as_str));
     text
 }
 
@@ -278,6 +310,11 @@ fn bank_body(bank: &BankFacts) -> String {
     let mut text = format!("version: {}\n", bank.version);
     if let Some(id) = bank.bank_id {
         let _ = writeln!(text, "bankId: \"{id:08x}\"");
+    }
+    if let Some(header) = &bank.header {
+        text.push_str("header: ");
+        hex(&mut text, header);
+        text.push('\n');
     }
     if !bank.media.is_empty() {
         let mut media: Vec<&MediaFacts> = bank.media.iter().collect();
@@ -303,6 +340,22 @@ fn bank_body(bank: &BankFacts) -> String {
                     let _ = writeln!(text, "  - \"{wem:08x}\"");
                 }
             }
+            text.push('\n');
+        }
+    }
+    if !bank.objects.is_empty() {
+        text.push_str("objects:\n");
+        for o in &bank.objects {
+            match o.id {
+                Some(id) => {
+                    let _ = writeln!(text, " - id: \"{id:08x}\"\n   type: {}", o.kind);
+                }
+                None => {
+                    let _ = writeln!(text, " - type: {}", o.kind);
+                }
+            }
+            text.push_str("   body: ");
+            hex(&mut text, &o.body);
             text.push('\n');
         }
     }

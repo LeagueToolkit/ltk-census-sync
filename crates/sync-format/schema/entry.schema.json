@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "census/entry",
   "title": "files/<manifest path>/<xx>/<path hash>.yaml (census export, format 2)",
-  "description": "One WAD entry: its identity, then what its bytes say under a key of its own -- skeleton, mesh, texture, bank, or a bin's links and objects (its entries' ritobin texts are beside it, <path hash>.bin/<yy>/<entry hash>.rito). The file is named for the entry's path hash (XXH64 of its lowercased path).",
+  "description": "One WAD entry: its identity, then what its bytes say under a key of its own -- skeleton, mesh, texture, clip, bank, or a bin's links and objects (its entries' ritobin texts are beside it, <path hash>.bin/<yy>/<entry hash>.rito). The file is named for the entry's path hash (XXH64 of its lowercased path).",
   "type": "object",
   "properties": {
     "sha256": {
@@ -185,6 +185,24 @@
         "top"
       ]
     },
+    "clip": {
+      "type": "object",
+      "properties": {
+        "joints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}$"
+          },
+          "description": "the hash of each joint the clip animates, in stored order"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "joints"
+      ],
+      "description": "an animation clip's joints"
+    },
     "bank": {
       "type": "object",
       "properties": {
@@ -232,13 +250,46 @@
               }
             }
           }
+        },
+        "header": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{2})*$",
+          "description": "the body of the bank's BKHD section, as hex; for a bank with a HIRC section"
+        },
+        "objects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{8}$",
+                "description": "the object's id; absent for an object too short to hold one"
+              },
+              "type": {
+                "type": "integer",
+                "description": "the object's type byte"
+              },
+              "body": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{2})*$",
+                "description": "the object's bytes after its id, as hex"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "body"
+            ]
+          },
+          "description": "every object of the bank's HIRC section, in stored order"
         }
       },
       "additionalProperties": false,
       "required": [
         "version"
       ],
-      "description": "a sound bank's wems and, for an events bank, its events with the wem ids their play actions reach"
+      "description": "a sound bank's wems and, for an events bank, its events with the wem ids their play actions reach, its header and its hierarchy's objects as stored"
     }
   },
   "additionalProperties": false,
