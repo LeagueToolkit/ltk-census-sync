@@ -68,11 +68,11 @@ target/release/census-sync status --repo data/history.git
 target/release/census-sync append --repo data/history.git <manifest>
 
 # check every commit the remote does not have yet
-pushed=$(git --git-dir=data/history.git ls-remote origin refs/heads/history | cut -f1)
+pushed=$(git --git-dir=data/history.git ls-remote origin refs/heads/history-v2 | cut -f1)
 target/release/census-sync check --repo data/history.git "$pushed"
 
 # push, then move the list's checkout past the builds just appended
-git --git-dir=data/history.git push origin history
+git --git-dir=data/history.git push origin history-v2
 git -C data/riot-manifests merge --ff-only origin/master
 ```
 

@@ -1,6 +1,6 @@
 //! The files whose text never varies: kept beside this crate and embedded as they are.
 
-/// `.gitattributes`, added by `history`'s first commit: every file is LF and full of hashes, and a
+/// `.gitattributes`, added by `history-v2`'s first commit: every file is LF and full of hashes, and a
 /// checkout that rewrote line endings would corrupt them.
 pub const GITATTRIBUTES: &str = "* -text\n";
 

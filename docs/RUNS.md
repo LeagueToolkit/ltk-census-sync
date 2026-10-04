@@ -312,3 +312,6 @@ published history was not checked.
 - **The oracle on it.** The four builds of 16.18 and 16.19.8207193, each appended onto its new
   parent from the chunk cache and the CDN: 5 of 5 trees and commits identical, 1,305.6 MB
   downloaded for 16.19.8207193. `census-sync check` passes on the five.
+- **Published** (2026-10-04, by the user's request): the branch as `history-v2`, beside `history`,
+  and the 190 patch tags removed. A clone of the published repository holds `history-v2` with the
+  tree the oracle wrote for 16.19.8207193: 5.71 GiB, 12,256,025 objects, 293 s.

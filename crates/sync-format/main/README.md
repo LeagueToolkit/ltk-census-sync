@@ -6,7 +6,7 @@ up to 16.19.8207193 were written by an export from a database of past builds; ea
 is appended from its own bytes by [ltk-census-sync](https://github.com/LeagueToolkit/ltk-census-sync).
 Nothing here is edited by hand.
 
-**This branch holds only this file and the license.** The history is on the branch `history`,
+**This branch holds only this file and the license.** The history is on the branch `history-v2`,
 whose newest tree has 1.4 million files -- one small file per WAD entry or bin entry -- which is
 why it is not what a plain clone checks out.
 
@@ -17,7 +17,7 @@ To work with the data:
 
 ```sh
 # the history only, without checking out a million files
-git clone --single-branch --branch history --no-checkout https://github.com/LeagueToolkit/ltk-census-history.git census
+git clone --single-branch --branch history-v2 --no-checkout https://github.com/LeagueToolkit/ltk-census-history.git census
 cd census
 
 # then read it without a working tree
@@ -29,7 +29,7 @@ git log --oneline -- files/data/final/champions/ahri.wad.client/a8/a847c7a46bc67
 
 # or check out a few kinds of file only
 git sparse-checkout set --no-cone /build.yaml /census.yaml /schema/ '*.rito' '*/_wad.yaml'
-git checkout history
+git checkout history-v2
 ```
 
 Each commit message is the build's version followed by trailers, so

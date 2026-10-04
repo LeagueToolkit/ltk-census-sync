@@ -1,12 +1,12 @@
 # Append
 
-How one new build becomes one commit on `history`, from the tip and the build's own bytes. The
+How one new build becomes one commit on `history-v2`, from the tip and the build's own bytes. The
 history is the only state: what the tip holds says what each WAD and entry was, and nothing else is
 kept between runs. The format of what is written is [FORMAT.md](FORMAT.md).
 
 ## Inputs
 
-- **The tip** of `history`, in a local clone ([OPERATIONS.md](OPERATIONS.md)).
+- **The tip** of `history-v2`, in a local clone ([OPERATIONS.md](OPERATIONS.md)).
 - **The build**: its manifest id, version, date and realms ([SOURCES.md](SOURCES.md)). The
   property-kind numbering of its bins follows from its patch: legacy before 10.8, so never for a
   build appended from here on.
@@ -63,9 +63,9 @@ in parallel, and each one's lines go into the stream as soon as it is read; thei
 change the tree. The stream is written through a buffer as it is produced: a build that rewrites
 many bins is gigabytes of text, more than one pipe write takes or memory should hold.
 
-The commit is written to `refs/census-sync/pending`, and `history` moves to it only when the import
+The commit is written to `refs/census-sync/pending`, and `history-v2` moves to it only when the import
 has succeeded, and only from the tip the append started from. An append that stops leaves
-`history` where it was.
+`history-v2` where it was.
 
 fast-import deduplicates blobs against what the repository holds, so an unchanged bin entry
 rewritten under a changed bin costs nothing.
@@ -99,6 +99,6 @@ only if every check passes; otherwise the run stops and nothing is pushed
 ## The oracle
 
 An append and the history it extends agree byte for byte, so the history is its own test: cut
-`history` at some build, append the builds that follow it from their bytes, and compare each tree
+`history-v2` at some build, append the builds that follow it from their bytes, and compare each tree
 id with the published commit's. It needs no database and no second implementation
 ([TOOLING.md](TOOLING.md)).

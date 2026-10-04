@@ -48,11 +48,8 @@ workspace then depends on.
 
 ## Open
 
-- **Publishing the history with clips and bank objects.** The writers render an `anm` entry's
-  `clip` and a bank's `header` and `objects`, and the history written again with them passes the
-  oracle ([RUNS.md](RUNS.md)). The published `history` does not hold them until that branch
-  replaces it, which the user does. An append onto the published `history` before
-  then writes the keys for the entries it reads only.
+- **The history's `main`.** Its README names the branch `history` and patch tags until the text
+  in `sync-format`'s `main/` is pushed there, which the user does.
 - **Banks left unread by that rewrite.** A bank with wems and no events was not read again, so one
   with a `HIRC` section and no events has no `header` or `objects` until its entry changes.
 - **The tags of 8.20 to 9.1.** About 200 WADs a build lack locale tags in `_wad.yaml`

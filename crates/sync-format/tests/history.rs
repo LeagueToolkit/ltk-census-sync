@@ -124,7 +124,7 @@ fn build_facts(text: &str) -> BuildFacts {
 #[ignore = "needs CENSUS_SYNC_HISTORY"]
 fn every_commit_has_the_build_yaml_message_and_time_of_its_build() {
     let history = History::open();
-    let commits: Vec<String> = history.git(&["rev-list", "--reverse", "history"]).lines().map(str::to_string).collect();
+    let commits: Vec<String> = history.git(&["rev-list", "--reverse", "history-v2"]).lines().map(str::to_string).collect();
     let builds = history.cat(&commits.iter().map(|c| format!("{c}:build.yaml")).collect::<Vec<_>>());
     let objects = history.cat(&commits);
     let mut failed = 0;
@@ -150,8 +150,8 @@ fn every_commit_has_the_build_yaml_message_and_time_of_its_build() {
 fn the_fixed_texts_are_the_published_ones() {
     let history = History::open();
     let mut names =
-        vec!["history:.gitattributes".to_string(), "history:census.yaml".to_string(), "main:README.md".to_string(), "main:LICENSE".to_string()];
-    names.extend(SCHEMAS.iter().map(|(path, _)| format!("history:{path}")));
+        vec!["history-v2:.gitattributes".to_string(), "history-v2:census.yaml".to_string(), "main:README.md".to_string(), "main:LICENSE".to_string()];
+    names.extend(SCHEMAS.iter().map(|(path, _)| format!("history-v2:{path}")));
     let published = history.cat(&names);
     let mut ours = vec![GITATTRIBUTES, CENSUS_YAML, MAIN_README, MAIN_LICENSE];
     ours.extend(SCHEMAS.iter().map(|(_, text)| *text));
@@ -166,7 +166,7 @@ fn the_fixed_texts_are_the_published_ones() {
 #[ignore = "needs CENSUS_SYNC_HISTORY"]
 fn every_wad_yaml_of_the_tip_renders_from_its_fields() {
     let history = History::open();
-    let wads: Vec<String> = history.files("history", "files/").into_iter().filter(|(p, _)| p.ends_with("/_wad.yaml")).map(|(_, id)| id).collect();
+    let wads: Vec<String> = history.files("history-v2", "files/").into_iter().filter(|(p, _)| p.ends_with("/_wad.yaml")).map(|(_, id)| id).collect();
     let mut failed = 0;
     for (id, text) in wads.iter().zip(history.cat(&wads)) {
         let version = top(&text, "version").expect("a version");

@@ -16,6 +16,9 @@ use sync_source::{
     BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, ManifestList, LIVE_REALM,
 };
 
+/// The branch that holds the builds (`docs/FORMAT.md`, "Branches and commits").
+const HISTORY: &str = "history-v2";
+
 #[derive(Parser)]
 #[command(about = "Append new live builds of League of Legends to the census history", version)]
 struct Cli {
@@ -74,7 +77,7 @@ struct StatusArgs {
     #[arg(long)]
     repo: Utf8PathBuf,
     /// The branch the builds are appended to.
-    #[arg(long, default_value = "history")]
+    #[arg(long, default_value = HISTORY)]
     branch: String,
     /// A clone of the manifest list, checked out at the last commit whose builds were appended.
     #[arg(long, env = "CENSUS_SYNC_LIST", default_value = "data/riot-manifests")]
@@ -98,7 +101,7 @@ struct AppendArgs {
     #[command(flatten)]
     sources: Sources,
     /// The branch to append to.
-    #[arg(long, default_value = "history")]
+    #[arg(long, default_value = HISTORY)]
     branch: String,
     /// Set the branch to this commit first.
     #[arg(long)]
@@ -126,7 +129,7 @@ struct CheckArgs {
     #[command(flatten)]
     sources: Sources,
     /// The branch whose commits are checked.
-    #[arg(long, default_value = "history")]
+    #[arg(long, default_value = HISTORY)]
     branch: String,
     /// The last commit already pushed: the commits after it on the branch are checked.
     since: String,
@@ -144,7 +147,7 @@ struct OracleArgs {
     branch: String,
     /// The published commit the range starts after.
     commit: String,
-    /// How many of the builds after it on `history` to re-append.
+    /// How many of the builds after it on `history-v2` to re-append.
     count: usize,
 }
 
@@ -352,14 +355,14 @@ fn run_check(args: &CheckArgs, pool: &rayon::ThreadPool) -> Result<()> {
     Ok(())
 }
 
-/// The commit `commit` names, and the `count` builds after it on `history`.
+/// The commit `commit` names, and the `count` builds after it on `history-v2`.
 fn published_after(git: &Git, commit: &str, count: usize) -> Result<(String, Vec<String>)> {
     let base = git.rev_parse(&format!("{commit}^{{commit}}"))?;
-    let range = format!("{base}..history");
+    let range = format!("{base}..{HISTORY}");
     let published: Vec<String> =
         git.run(&["rev-list", "--reverse", "--first-parent", "--ancestry-path", &range])?.lines().take(count).map(str::to_string).collect();
     if published.len() < count {
-        bail!("history has {} builds after {commit}, not {count}", published.len());
+        bail!("{HISTORY} has {} builds after {commit}, not {count}", published.len());
     }
     Ok((base, published))
 }

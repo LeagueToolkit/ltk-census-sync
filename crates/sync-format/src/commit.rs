@@ -1,4 +1,4 @@
-//! A build's commit on `history` (`docs/FORMAT.md`, "Branches, commits, tags"): its author, date
+//! A build's commit on `history-v2` (`docs/FORMAT.md`, "Branches and commits"): its author, date
 //! and message are functions of the build, so the same build appended twice makes the same commit.
 
 use crate::yaml::BuildFacts;

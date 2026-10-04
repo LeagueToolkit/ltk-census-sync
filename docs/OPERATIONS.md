@@ -14,7 +14,7 @@ on its own round trip, so the clone is full. Cloned from GitHub it is about 6 Gi
 ([RUNS.md](RUNS.md)); a local `git repack -adf --window=250 --depth=50` brings it to about 4.
 
 Pushed commits are appended on top of what the remote has, so the clone and the remote never
-diverge: a run starts by fetching `history`, and stops if the remote has moved somewhere the clone
+diverge: a run starts by fetching `history-v2`, and stops if the remote has moved somewhere the clone
 cannot fast-forward to.
 
 ## Commands
@@ -22,9 +22,9 @@ cannot fast-forward to.
 | command | does |
 | --- | --- |
 | `census-sync status` | fetch the manifest list, and print the tip and the live builds the history lacks, in arrival order, each with its version, manifest and date |
-| `census-sync append <manifest>` | append one build to the local `history`, its version from the manifest list and its date from the CDN unless given; no push |
+| `census-sync append <manifest>` | append one build to the local `history-v2`, its version from the manifest list and its date from the CDN unless given; no push |
 | `census-sync check <commit>` | the checks of [APPEND.md](APPEND.md), "Before a push", on each commit after `commit`, the last one pushed; prints each problem |
-| `census-sync push` | push `history` to the configured remote |
+| `census-sync push` | push `history-v2` to the configured remote |
 | `census-sync run` | fetch, status, append every new build in arrival order, check, push, and move the list's checkout to the fetched commit |
 | `census-sync oracle <commit> <count>` | re-append `count` builds after `commit` on a branch of its own, and compare each tree and commit with the published one |
 | `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in; for a mirror or the cache (`--offline`), since it asks for one chunk a request |
@@ -56,11 +56,11 @@ The real remote is set explicitly and is never the default. Development pushes t
 remote**: a local bare clone of the history, made for the purpose, so a push to the wrong place
 lands nowhere that matters.
 
-A push is `history`, fast-forward only, never forced.
+A push is `history-v2`, fast-forward only, never forced.
 
 ## When something fails
 
-The run stops and exits non-zero, `history` stays at the tip it started from, and nothing is
+The run stops and exits non-zero, `history-v2` stays at the tip it started from, and nothing is
 pushed. Causes it stops for:
 
 - a file the build ships that a writer cannot parse in a way it has not seen before;

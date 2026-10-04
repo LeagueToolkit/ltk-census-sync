@@ -14,11 +14,13 @@ for a reader that ports mods without a game install): an `anm` entry's `clip`, a
 ## Branches and commits
 
 - **`main`**, the default branch, holds only `README.md` and `LICENSE` (`sync-format`'s `main/`),
-  so a plain clone checks out two small files. It shares no commit with `history`; its commits
+  so a plain clone checks out two small files. It shares no commit with `history-v2`; its commits
   change those two files alone, on top of each other.
-- **`history`** holds the builds, one commit per build. Its first commit adds `.gitattributes`
+- **`history-v2`** holds the builds, one commit per build. Its first commit adds `.gitattributes`
   (`* -text`): every file is LF and full of hashes, and a checkout that rewrote line endings would
   corrupt them.
+- **`history`** holds the same builds to 16.19.8207193 as first published, without an `anm`
+  entry's `clip` and a bank's `header` and `objects`. Nothing is appended to it.
 - **A commit** is authored and committed by `census <census@localhost>` at midnight UTC of the
   build's date (`+0000`). Its message is the build's version, a blank line, then trailers:
 
