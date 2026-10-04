@@ -32,10 +32,9 @@ git sparse-checkout set --no-cone /build.yaml /census.yaml /schema/ '*.rito' '*/
 git checkout history
 ```
 
-Each patch is tagged with its name (`8.20` ... `16.19`) at its newest build when the next patch
-began, so `git diff 16.18 16.19` is one patch. A tag never moves: a hotfix that came after it lands
-after it, and `build.yaml` says which build a commit is. Each commit message is the build's version followed by
-trailers, so `git log --grep 'Census-Source: rads'` finds builds without reading a tree:
+Each commit message is the build's version followed by trailers, so
+`git log --grep 'Census-Patch: 16.19'` finds a patch's builds without reading a tree, and
+`build.yaml` says which build a commit is. The history has no tags:
 
 ```
 16.19.8207193

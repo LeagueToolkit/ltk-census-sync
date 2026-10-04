@@ -94,10 +94,6 @@ only if every check passes; otherwise the run stops and nothing is pushed
   date.
 - **One realm.** A build's `realms` is `NA1`, the realm census-sync follows (decided
   2026-10-03), so no realm adopts a build later and an old commit is never revisited for one.
-- **A tag is set once** (decided 2026-10-03). Appending the first build of a later patch tags the
-  tip with its patch, unless that patch has a tag already; a tag never moves, and a build that
-  arrives after its patch's tag lands after it. A patch's last build is known only once the next
-  patch ships, and moving a tag would make every reader fetch tags with `--force`.
 - **No PBE.** The live realm only.
 
 ## The oracle

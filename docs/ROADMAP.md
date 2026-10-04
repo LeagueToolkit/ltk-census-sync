@@ -39,7 +39,7 @@ status, append, check, `git push`, and the list's checkout moved on (decided 202
 by hand for now). Then the builds since 16.19, appended, checked, and pushed to the real history by
 the user. Done: `check` passes the published builds of 16.18 and 16.19 ([RUNS.md](RUNS.md)).
 
-**7. On a schedule, when someone wants it.** `census-sync push`, the branch and its tags, against a
+**7. On a schedule, when someone wants it.** `census-sync push`, the branch, against a
 stand-in remote first; `census-sync run`, a whole run in one command; and a schedule for it, cron in
 a jail on a NAS (decided 2026-10-02) or CI, with a deploy key.
 
@@ -51,7 +51,7 @@ workspace then depends on.
 - **Publishing the history with clips and bank objects.** The writers render an `anm` entry's
   `clip` and a bank's `header` and `objects`, and the history written again with them passes the
   oracle ([RUNS.md](RUNS.md)). The published `history` does not hold them until that branch
-  replaces it and its tags move, which the user does. An append onto the published `history` before
+  replaces it, which the user does. An append onto the published `history` before
   then writes the keys for the entries it reads only.
 - **Banks left unread by that rewrite.** A bank with wems and no events was not read again, so one
   with a `HIRC` section and no events has no `header` or `objects` until its entry changes.

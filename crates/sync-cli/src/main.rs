@@ -11,7 +11,7 @@ use camino::Utf8PathBuf;
 use clap::{Args, Parser, Subcommand};
 use rayon::prelude::*;
 use sync_format::{legacy_bins, BuildFacts};
-use sync_history::{append, build_facts, check, manifests, tag_patch, Appended, Git};
+use sync_history::{append, build_facts, check, manifests, Appended, Git};
 use sync_source::{
     BundleMirror, Cdn, CdnSource, ChunkCache, ChunkRef, ChunkSource, Downloaded, Layers, Manifest, ManifestList, LIVE_REALM,
 };
@@ -31,8 +31,7 @@ enum Command {
     /// The tip, and the live builds the manifest list has added that the history lacks, in the
     /// order they arrived.
     Status(StatusArgs),
-    /// Append one build to the local history; no push. A build of a later patch than the tip's
-    /// first tags the tip with its patch, unless that patch has a tag.
+    /// Append one build to the local history; no push.
     Append(AppendArgs),
     /// Check the commits after a pushed one, before they are pushed: every file they add or change
     /// by its kind, each message, and each tree against its build's manifest. Prints each problem.
@@ -45,7 +44,7 @@ enum Command {
     Verify(VerifyArgs),
     /// Re-append builds of the history in a row onto a branch of their own, from their bytes and
     /// their published facts: the history as those bytes write it. Prints where a tree differs
-    /// from the published one, and where each tag of the range would move.
+    /// from the published one.
     Rebuild(OracleArgs),
 }
 
@@ -308,13 +307,9 @@ fn run_append(args: &AppendArgs, pool: &rayon::ThreadPool) -> Result<()> {
         None => inputs.published(manifest)?,
     };
     let facts = facts_of(&version, manifest, &date)?;
-    let tip = git.rev_parse(&branch)?;
     let started = Instant::now();
     let appended = append(&git, &args.branch, &facts, &inputs.manifest(manifest)?, &inputs.source(), pool)?;
     log(&facts, &appended, started, Downloaded::default(), inputs.downloaded());
-    if let Some(patch) = tag_patch(&git, &tip, &facts)? {
-        tracing::info!("tagged {patch} at {}, its newest build, since {} starts {}", &tip[..12], facts.version, facts.patch);
-    }
     Ok(())
 }
 
@@ -436,13 +431,6 @@ fn run_rebuild(args: &OracleArgs, pool: &rayon::ThreadPool) -> Result<()> {
             n => tracing::warn!("{}/{} {}: {n} paths differ from the published tree", i + 1, published.len(), facts.version),
         }
         rebuilt.push(appended.commit);
-    }
-    let tags = git.run(&["for-each-ref", "--format=%(refname:short) %(objectname)", "refs/tags"])?;
-    for (tag, commit) in tags.lines().filter_map(|l| l.split_once(' ')) {
-        if let Some(i) = published.iter().position(|p| p == commit) {
-            let moves = if rebuilt[i] == *commit { "stays" } else { "moves" };
-            println!("{tag}	{commit}	{}	{moves}", rebuilt[i]);
-        }
     }
     let changed = published.iter().zip(&rebuilt).filter(|(p, r)| p != r).count();
     tracing::info!(

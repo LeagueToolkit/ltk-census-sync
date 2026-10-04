@@ -71,14 +71,12 @@ target/release/census-sync append --repo data/history.git <manifest>
 pushed=$(git --git-dir=data/history.git ls-remote origin refs/heads/history | cut -f1)
 target/release/census-sync check --repo data/history.git "$pushed"
 
-# push, tags too, then move the list's checkout past the builds just appended
-git --git-dir=data/history.git push origin history --tags
+# push, then move the list's checkout past the builds just appended
+git --git-dir=data/history.git push origin history
 git -C data/riot-manifests merge --ff-only origin/master
 ```
 
-The first build of a new patch tags the tip with the patch before it, which is that patch's newest
-build; a tag is set once and never moves. An append downloads the manifest and the chunks of the
-entries that changed: a few megabytes for a
+An append downloads the manifest and the chunks of the entries that changed: a few megabytes for a
 hotfix, one to four gigabytes for a patch, kept in `data/chunks/` so a run that stops and is run
 again downloads nothing twice.
 
@@ -90,8 +88,8 @@ and `check` checks the commits before they are pushed. The writers reproduce the
 byte for byte, the builds of 16.10 to 16.19 append as published, and those of 16.18 do with Riot's
 CDN as the only source ([docs/RUNS.md](docs/RUNS.md)).
 
-Not written, since a run nobody watches needs them and a run by hand does not: `census-sync push`
-(the branch and its tags), `census-sync run` (all of the above in one command), and a schedule to
+Not written, since a run nobody watches needs them and a run by hand does not: `census-sync push`,
+`census-sync run` (all of the above in one command), and a schedule to
 run it on, a NAS or CI ([docs/ROADMAP.md](docs/ROADMAP.md)).
 
 ## Layout

@@ -11,7 +11,7 @@ carries the format number, and a reader checks it before parsing. Added so far (
 for a reader that ports mods without a game install): an `anm` entry's `clip`, and a bank's
 `header` and `objects`. Every commit holds them, from the first.
 
-## Branches, commits, tags
+## Branches and commits
 
 - **`main`**, the default branch, holds only `README.md` and `LICENSE` (`sync-format`'s `main/`),
   so a plain clone checks out two small files. It shares no commit with `history`; its commits
@@ -33,11 +33,8 @@ for a reader that ports mods without a game install): an `anm` entry's `clip`, a
 
   `Census-Manifest` is the manifest id in 16 hex, `Census-Realms` the live realms that shipped the
   build, sorted, space-separated. So the same build appended twice makes the same commit id.
-- **A tag** (lightweight) named for the patch (`8.20` ... `16.19`) marks the patch's newest build
-  when the next patch's first build is appended, and never moves (decided 2026-10-03). Up to
-  16.19, in patch order, that is each patch's last build. A build of a patch that arrives after
-  its tag lands after it: `16.19` marks 16.19.8207193, and the hotfixes after it come later. A
-  reader that wants a patch's very last build reads `version` in `build.yaml`.
+- **No tags** (decided 2026-10-04). A commit's message and `build.yaml` name its build and its
+  patch, so `git log --grep 'Census-Patch: 16.19'` finds a patch's builds.
 - **Order.** The builds up to 16.19 are in patch order: season, patch, build number, manifest id.
   Appended builds land in the order they arrive ([APPEND.md](APPEND.md)).
 
@@ -124,7 +121,7 @@ realms:
  - "EUN1"
 ```
 
-- `version`: the client's version; `patch`: season and patch, the tag's name.
+- `version`: the client's version; `patch`: season and patch.
 - `manifest`: the RMAN manifest id, 16 hex. `source: "rman"` says it is one.
 - `date`: the day the manifest was published (its `Last-Modified`), UTC.
 - `legacyBins`: whether the build's bins use the property-kind numbering of builds before 10.8.

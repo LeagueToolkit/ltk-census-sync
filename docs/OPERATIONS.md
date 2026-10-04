@@ -22,13 +22,13 @@ cannot fast-forward to.
 | command | does |
 | --- | --- |
 | `census-sync status` | fetch the manifest list, and print the tip and the live builds the history lacks, in arrival order, each with its version, manifest and date |
-| `census-sync append <manifest>` | append one build to the local `history`, its version from the manifest list and its date from the CDN unless given, and tag the tip with its patch when the build starts a later one and that patch has no tag; no push |
+| `census-sync append <manifest>` | append one build to the local `history`, its version from the manifest list and its date from the CDN unless given; no push |
 | `census-sync check <commit>` | the checks of [APPEND.md](APPEND.md), "Before a push", on each commit after `commit`, the last one pushed; prints each problem |
-| `census-sync push` | push `history`, its tags and notes to the configured remote |
+| `census-sync push` | push `history` to the configured remote |
 | `census-sync run` | fetch, status, append every new build in arrival order, check, push, and move the list's checkout to the fetched commit |
 | `census-sync oracle <commit> <count>` | re-append `count` builds after `commit` on a branch of its own, and compare each tree and commit with the published one |
 | `census-sync verify <manifest>...` | check every chunk the WADs of those manifests use, and list each that does not verify with the bundle its manifest places it in; for a mirror or the cache (`--offline`), since it asks for one chunk a request |
-| `census-sync rebuild <commit> <count>` | re-append `count` builds after `commit` in a row on a branch of its own, from their bytes and their published facts, and list where each tag of the range would move; the history as its bytes write it, for a fix of the published history |
+| `census-sync rebuild <commit> <count>` | re-append `count` builds after `commit` in a row on a branch of its own, from their bytes and their published facts; the history as its bytes write it, for a fix of the published history |
 
 The commands read manifests from `--manifests` and chunks from Riot's CDN by range, through the
 chunk cache (`--cache`); a manifest or a chunk not there is downloaded, once
@@ -56,7 +56,7 @@ The real remote is set explicitly and is never the default. Development pushes t
 remote**: a local bare clone of the history, made for the purpose, so a push to the wrong place
 lands nowhere that matters.
 
-A push is `history` (fast-forward only, never forced), then the new tags.
+A push is `history`, fast-forward only, never forced.
 
 ## When something fails
 
