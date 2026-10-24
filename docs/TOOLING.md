@@ -13,15 +13,18 @@ first, else a git dependency pinned by `rev`, never a committed path dependency.
   every entry's `kind`, `ddsfile`'s format names are a `dds` entry's `format`. Each is pinned with
   `=` to the version of the export that wrote the history, so `cargo update` cannot move it, and
   moving one is a writer change. After any `cargo update`, `cargo tree -d` lists no `ltk_*` crate
-  twice.
+  twice but `ltk_hash` (below).
 - **`ltk_file` 0.2.11 panics on three bytes**: its JPEG pattern declares three and reads four.
   `kind_of` gives three bytes the kinds of its patterns that fit them, in its order. No entry of
   the history has three bytes.
-- **ltk_ritobin is patched** to LeagueToolkit/league-toolkit#269 at `521a875` until it is released,
-  with `ltk_meta`, `ltk_hash`, `ltk_primitives` and `ltk_io_ext` from the same commit, so the build
-  holds one copy of each. The bin entries of the history are its `PrintCanonical` text, of objects
-  read by that commit's `BinObject::from_reader`; moving the pin is a writer change and passes the
-  oracle first. A "patch was not used" warning from cargo means one of the five is unpatched.
+- **The bin entries of the history are `sync-format`'s own ritobin text** (`rito.rs`, C++ ritobin's
+  canonical layout), of objects read by `ltk_meta`'s `BinObject::from_reader`. `ltk_meta` is a
+  writer and pinned with `=`; `ltk_ritobin` only parses a `.rito` back in the checks before a push,
+  so it floats within its minor. `ltk_ritobin`'s own printer folds lines to a width and is not the
+  history's text.
+- **Two `ltk_hash`.** `ltk_wad` 0.5.7 and `ltk_anim` 0.3.9 build against `ltk_hash` 0.4 and
+  `ltk_meta` 0.9 against 0.5, so `cargo tree -d` lists `ltk_hash` twice until those two move. No
+  value crosses between the two.
 - **git** is a process, not a library: `ls-tree`, `cat-file --batch`, `fast-import`, `push`.
 - **`ureq`** for downloads from Riot's CDN: blocking with no async runtime, which suits a tool whose
   parallelism is rayon's. It has no `multipart/byteranges` reader; `sync-source` has its own.

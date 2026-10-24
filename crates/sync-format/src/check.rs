@@ -8,9 +8,11 @@
 
 use std::collections::HashMap;
 
-use ltk_ritobin::{Cst, PrintCanonical as _};
+use ltk_ritobin::Cst;
 use regex::Regex;
 use serde_yaml_ng::{Mapping, Value};
+
+use crate::rito;
 
 /// The keywords the schemas use, and so the ones read.
 const KEYWORDS: [&str; 13] = [
@@ -225,7 +227,7 @@ fn ritobin(text: &str) -> Result<(), String> {
     if let Some(diagnostic) = partial.diagnostics.first() {
         return Err(format!("does not build a bin ({} diagnostics): {diagnostic:?}", partial.diagnostics.len()));
     }
-    let printed = partial.bin.print_canonical().map_err(|e| format!("does not print back: {e}"))?;
+    let printed = rito::print_bin(&partial.bin).map_err(|e| format!("does not print back: {e}"))?;
     if printed != text {
         let line = printed.lines().zip(text.lines()).position(|(a, b)| a != b).unwrap_or(printed.lines().count().min(text.lines().count()));
         return Err(format!("prints back as other text, from line {}", line + 1));

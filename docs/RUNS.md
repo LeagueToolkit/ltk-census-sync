@@ -315,3 +315,20 @@ published history was not checked.
 - **Published** (2026-10-04, by the user's request): the branch as `history-v2`, beside `history`,
   and the 190 patch tags removed. A clone of the published repository holds `history-v2` with the
   tree the oracle wrote for 16.19.8207193: 5.71 GiB, 12,256,025 objects, 293 s.
+
+## The oracle on the released ltk crates (2026-10-24)
+
+- **What.** `ltk_meta` 0.9.1, `ltk_hash` 0.5.1, `ltk_primitives` 0.3.8, `ltk_io_ext` 0.4.9 and
+  `ltk_ritobin` 0.12.0 from crates.io in place of the git pin at `521a875`, with the canonical
+  printer moved into `sync-format` (`rito.rs`). `ltk_meta` 0.9 resolves the width of a `hash`
+  value from the sizes a file declares, after a walk with 4-byte hashes fails. The oracle from a
+  fresh clone of `history-v2`, an empty chunk cache and the CDN as the only source.
+- **10.7.3149802 and 10.8.3167615**, the last build of the legacy property numbering and the first
+  of the current one: 2 of 2 trees and commits identical. 490 and 534 WADs changed, 1,750.3 and
+  1,358.1 MB downloaded, 94.6 and 89.5 s.
+- **16.18**, the four builds: 4 of 4 trees and commits identical, 1,663.6 MB downloaded for the
+  first, 122 s in all.
+- **8.21.** Not checked: the CDN answers 404 for the manifests of both builds (`D036AFBA858BF758`,
+  `3793A9C3B40FB041`). The earliest builds are reachable from the archive only.
+- **Objects without a file at the tip (16.20.8248524).** 0 of 462,567 objects in 46,881 bins: every
+  object the published history lists parsed under the pinned reader.

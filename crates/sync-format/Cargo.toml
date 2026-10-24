@@ -12,6 +12,7 @@ ltk_file.workspace = true
 ltk_hash.workspace = true
 ltk_meta.workspace = true
 ltk_ritobin.workspace = true
+ryu.workspace = true
 ltk_mesh.workspace = true
 ltk_anim.workspace = true
 ltk_texture.workspace = true

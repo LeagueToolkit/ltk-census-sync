@@ -300,8 +300,11 @@ entries: map[hash,embed] = {
   digit, fixed or scientific whichever is shorter (`25`, `0.5`, `1e+05`), and an integer past its
   shortest digits as its exact value (2^36 is `68719476736`); strings with C escapes
   (`\t \n \r \b \f \\ \"`), `\xHH` below 0x20, every other byte as it is.
-- The text is ltk_ritobin's `PrintCanonical` (LeagueToolkit/league-toolkit#269, pinned at
-  `521a875` until released), which writes C++ ritobin's text.
+- The text is `sync-format`'s own printer (`rito.rs`), which writes C++ ritobin's text.
+- A `hash` the file stores in 8 bytes (builds from 16.22) has the type `hash[u64]`, in a
+  container's arguments too (`list[hash[u64]]`, `map[hash[u64],embed]`), and the value `0x%016x`.
+  The spelling is ltk_ritobin's (decided 2026-10-24); C++ ritobin predates the width. An empty
+  container of hashes has no width and is `list[hash]`.
 - A file depends on its object's bytes and class alone, so one object is one blob in every bin and
   build that holds it.
 - An object of a build before 10.8 is read by the legacy property-kind numbering, or by the other

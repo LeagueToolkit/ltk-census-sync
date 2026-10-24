@@ -1,14 +1,13 @@
 //! One bin object read with ltk_meta and printed as C++ ritobin's text (`docs/FORMAT.md`, "A bin's
-//! entries"). Both are writers: the history's `.rito` files are ltk_ritobin's `PrintCanonical` at
-//! the pinned commit, of an object read by ltk_meta's `BinObject::from_reader` at the same commit.
+//! entries"). Both are writers: the history's `.rito` files are `rito::print_bin`'s text of an
+//! object read by ltk_meta's `BinObject::from_reader` at the pinned version.
 
 use std::io::Cursor;
 
 use ltk_hash::BinHash;
 use ltk_meta::{Bin, BinObject};
-use ltk_ritobin::PrintCanonical as _;
 
-use crate::Error;
+use crate::{rito, Error};
 
 /// The first patch whose bins number the complex property kinds the current way (with
 /// `WadChunkLink` and `List2`). Measured by walking the objects' bytes under both numberings: every
@@ -44,5 +43,5 @@ pub fn render_object(bytes: &[u8], class: u32, legacy: bool) -> Result<String, E
     let object = parse_object(bytes, class, legacy)?;
     let mut bin = Bin::default();
     bin.objects.insert(object.path_hash, object);
-    bin.print_canonical().map_err(|e| Error::Object(e.to_string()))
+    rito::print_bin(&bin).map_err(|e| Error::Object(e.to_string()))
 }

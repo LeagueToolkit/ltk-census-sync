@@ -24,6 +24,7 @@ mod names;
 mod object;
 mod read;
 mod rig;
+mod rito;
 mod texts;
 mod texture;
 mod yaml;

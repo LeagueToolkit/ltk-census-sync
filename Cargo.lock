@@ -762,7 +762,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "glam",
- "ltk_hash",
+ "ltk_hash 0.4.0",
  "ltk_io_ext",
  "num_enum",
  "thiserror 1.0.69",
@@ -780,7 +780,18 @@ dependencies = [
 [[package]]
 name = "ltk_hash"
 version = "0.4.0"
-source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=521a875e7c281da1ef98fad93dd822ae8b68f430#521a875e7c281da1ef98fad93dd822ae8b68f430"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ada44666d233f89786fdfd6784346a140ddfc7c31d31ac23dfa7b066f9fbe41b"
+dependencies = [
+ "byteorder",
+ "xxhash-rust",
+]
+
+[[package]]
+name = "ltk_hash"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63c57a6d50b0b2a0e4121f791508d8a999ad6c92d3c78a547da119054c802b6a"
 dependencies = [
  "byteorder",
  "xxhash-rust",
@@ -788,8 +799,9 @@ dependencies = [
 
 [[package]]
 name = "ltk_io_ext"
-version = "0.4.7"
-source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=521a875e7c281da1ef98fad93dd822ae8b68f430#521a875e7c281da1ef98fad93dd822ae8b68f430"
+version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb7d8109559ce8fd5c364be0c793d51f658a6c2d5afb35ffb8b8ce7f8731d3b7"
 dependencies = [
  "byteorder",
  "glam",
@@ -815,15 +827,16 @@ dependencies = [
 
 [[package]]
 name = "ltk_meta"
-version = "0.8.6"
-source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=521a875e7c281da1ef98fad93dd822ae8b68f430#521a875e7c281da1ef98fad93dd822ae8b68f430"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bdb750a2336b1a5055b330cda2e9d9c26a0c8c95cabaa4b90792857e8cce048e"
 dependencies = [
  "byteorder",
  "enum_dispatch",
  "glam",
  "indexmap",
  "log",
- "ltk_hash",
+ "ltk_hash 0.5.1",
  "ltk_io_ext",
  "ltk_primitives",
  "miette",
@@ -834,8 +847,9 @@ dependencies = [
 
 [[package]]
 name = "ltk_primitives"
-version = "0.3.6"
-source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=521a875e7c281da1ef98fad93dd822ae8b68f430#521a875e7c281da1ef98fad93dd822ae8b68f430"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d2ec61599fb7ad880c5b7febc317c52cc0b2aa3d18367437af007796f2ac85b"
 dependencies = [
  "byteorder",
  "glam",
@@ -844,19 +858,19 @@ dependencies = [
 
 [[package]]
 name = "ltk_ritobin"
-version = "0.9.0"
-source = "git+https://github.com/LeagueToolkit/league-toolkit?rev=521a875e7c281da1ef98fad93dd822ae8b68f430#521a875e7c281da1ef98fad93dd822ae8b68f430"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62d878b50a28c47c1aebfc10d842732c8c06949958f504f15685d88fa75a6ba2"
 dependencies = [
  "glam",
  "indexmap",
  "itertools",
- "ltk_hash",
+ "ltk_hash 0.5.1",
  "ltk_meta",
  "ltk_primitives",
  "miette",
  "nom",
  "nom_locate",
- "ryu",
  "smallvec",
  "thiserror 1.0.69",
  "xxhash-rust",
@@ -893,7 +907,7 @@ dependencies = [
  "flate2",
  "itertools",
  "ltk_file",
- "ltk_hash",
+ "ltk_hash 0.4.0",
  "ltk_io_ext",
  "memchr",
  "num_enum",
@@ -1646,13 +1660,14 @@ dependencies = [
  "glam",
  "ltk_anim",
  "ltk_file",
- "ltk_hash",
+ "ltk_hash 0.5.1",
  "ltk_mesh",
  "ltk_meta",
  "ltk_ritobin",
  "ltk_texture",
  "pretty_assertions",
  "regex",
+ "ryu",
  "serde_yaml_ng",
  "sha2",
  "thiserror 2.0.21",
