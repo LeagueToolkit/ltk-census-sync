@@ -314,7 +314,8 @@ entries: map[hash,embed] = {
 **The whole bin** is its entry's `links` as the header's `linked`, then the lines between
 `entries: map[hash,embed] = {` and the closing `}` of every file under `<hash>.bin/`, in path
 order, which is unsigned entry hash order. That is `ritobin_cli -k`'s text for the bin, byte for
-byte. Its stored order, its version and its link order are not kept.
+byte, for a bin with no 8-byte hash; `hash[u64]` is past C++ ritobin. Its stored order, its
+version and its link order are not kept.
 
 ## Not in the history
 

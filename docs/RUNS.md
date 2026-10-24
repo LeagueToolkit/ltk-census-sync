@@ -332,3 +332,19 @@ published history was not checked.
   `3793A9C3B40FB041`). The earliest builds are reachable from the archive only.
 - **Objects without a file at the tip (16.20.8248524).** 0 of 462,567 objects in 46,881 bins: every
   object the published history lists parsed under the pinned reader.
+
+## 16.21, the first build with 8-byte hashes (2026-10-24)
+
+- **What.** 16.21.8298620 (`b499fb04b1158cf6`, 2026-10-19), the live build on every realm,
+  appended onto 16.20.8248524 on a scratch branch, from the CDN; not pushed. The ltk_meta 0.9.1
+  reader, which resolves a `hash` value's width from the sizes a file declares.
+- **The append.** 422 of 4,048 WADs changed, 25,820 entries read, 287,406 files written, 1,381.1 MB
+  downloaded in 25,588 requests, 134 s. No bin object unrenderable, no entry in error.
+- **Where the wide hashes are.** 33,736 `hash[u64]` values in 33,613 `.rito` files, every one the
+  property `0x8d39bde6` of class `0xff9d3409`: `StaticMaterialDef.name`, which the meta dataset
+  records as a String from 13.15 to 16.20 and a Hash from 16.21. None in a list, option or map.
+  Most under `map11` (5,627 files), `map22` (3,188), `ui` (1,743) and `companions` (1,628).
+- **The value.** For the 33,375 materials whose file exists in both builds, the 16.21 hash is the
+  xxh3-64 of the 16.20 string lowercased, 33,375 of 33,375. The width search picked 8 bytes for
+  every one and the bytes are the engine's hash.
+- **Objects without a file at 16.21.** 0 of 466,863 objects in 47,160 bins.
